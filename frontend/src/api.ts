@@ -247,6 +247,7 @@ export const api = {
       const query = params.toString() ? `?${params.toString()}` : "";
       return request<TransactionItem[]>(`/transactions${query}`);
     },
+    getMyHistory: (): Promise<TransactionItem[]> => request<TransactionItem[]>("/transactions/my-history"),
     getItems: (id: number | string) => request(`/transactions/${id}/items`),
     create: (data: {
       customer_id?: number | null;

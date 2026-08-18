@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, createContext, useContext, useEffect } from "react";
 import { Toaster, toast } from "sonner";
 import { api, getSavedUser, UserPayload, RegisteredCustomer, DashboardSummary, TransactionItem, StaffItem } from "../api";
+import logoImg from "../assets/SmartMart_Logo.jpg";
 import {
   LayoutDashboard, Package, ShoppingCart, Users, BarChart3,
   LogOut, Search, Plus, Minus, Trash2, Bell, AlertTriangle,
@@ -66,41 +67,41 @@ const peso = (n: number) =>
   `₱${n.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const CAT_COLORS: Record<string, string> = {
-  Snacks:                       "bg-amber-100 text-amber-700",
-  "Non-Alcoholic Beverages":    "bg-blue-100 text-blue-700",
-  "Alcoholic Beverages":        "bg-amber-100 text-amber-800",
-  "Instant Foods":              "bg-orange-100 text-orange-700",
-  "Canned Goods":               "bg-red-100 text-red-700",
-  "Bread & Bakery":             "bg-yellow-100 text-yellow-700",
-  "Candies & Chocolates":       "bg-pink-100 text-pink-700",
-  "Dairy Products":             "bg-sky-100 text-sky-700",
-  "Cooking Essentials":         "bg-lime-100 text-lime-700",
-  "Personal Care":              "bg-purple-100 text-purple-700",
-  "Household Essentials":       "bg-teal-100 text-teal-700",
-  "Health & Wellness":          "bg-green-100 text-green-700",
-  "Baby Products":              "bg-rose-100 text-rose-700",
-  "School & Office Supplies":   "bg-violet-100 text-violet-700",
-  "Frozen Foods":               "bg-cyan-100 text-cyan-700",
-  Miscellaneous:                "bg-gray-100 text-gray-700",
+  Snacks: "bg-amber-100 text-amber-700",
+  "Non-Alcoholic Beverages": "bg-blue-100 text-blue-700",
+  "Alcoholic Beverages": "bg-amber-100 text-amber-800",
+  "Instant Foods": "bg-orange-100 text-orange-700",
+  "Canned Goods": "bg-red-100 text-red-700",
+  "Bread & Bakery": "bg-yellow-100 text-yellow-700",
+  "Candies & Chocolates": "bg-pink-100 text-pink-700",
+  "Dairy Products": "bg-sky-100 text-sky-700",
+  "Cooking Essentials": "bg-lime-100 text-lime-700",
+  "Personal Care": "bg-purple-100 text-purple-700",
+  "Household Essentials": "bg-teal-100 text-teal-700",
+  "Health & Wellness": "bg-green-100 text-green-700",
+  "Baby Products": "bg-rose-100 text-rose-700",
+  "School & Office Supplies": "bg-violet-100 text-violet-700",
+  "Frozen Foods": "bg-cyan-100 text-cyan-700",
+  Miscellaneous: "bg-gray-100 text-gray-700",
 };
 
 const CAT_BG: Record<string, string> = {
-  Snacks:                       "bg-amber-50",
-  "Non-Alcoholic Beverages":    "bg-blue-50",
-  "Alcoholic Beverages":        "bg-amber-50",
-  "Instant Foods":              "bg-orange-50",
-  "Canned Goods":               "bg-red-50",
-  "Bread & Bakery":             "bg-yellow-50",
-  "Candies & Chocolates":       "bg-pink-50",
-  "Dairy Products":             "bg-sky-50",
-  "Cooking Essentials":         "bg-lime-50",
-  "Personal Care":              "bg-purple-50",
-  "Household Essentials":       "bg-teal-50",
-  "Health & Wellness":          "bg-green-50",
-  "Baby Products":              "bg-rose-50",
-  "School & Office Supplies":   "bg-violet-50",
-  "Frozen Foods":               "bg-cyan-50",
-  Miscellaneous:                "bg-gray-50",
+  Snacks: "bg-amber-50",
+  "Non-Alcoholic Beverages": "bg-blue-50",
+  "Alcoholic Beverages": "bg-amber-50",
+  "Instant Foods": "bg-orange-50",
+  "Canned Goods": "bg-red-50",
+  "Bread & Bakery": "bg-yellow-50",
+  "Candies & Chocolates": "bg-pink-50",
+  "Dairy Products": "bg-sky-50",
+  "Cooking Essentials": "bg-lime-50",
+  "Personal Care": "bg-purple-50",
+  "Household Essentials": "bg-teal-50",
+  "Health & Wellness": "bg-green-50",
+  "Baby Products": "bg-rose-50",
+  "School & Office Supplies": "bg-violet-50",
+  "Frozen Foods": "bg-cyan-50",
+  Miscellaneous: "bg-gray-50",
 };
 
 // ─── Custom Charts ────────────────────────────────────────────────────────────
@@ -229,12 +230,12 @@ function StatCard({ icon, label, value, sub, color = "green" }: {
   icon: React.ReactNode; label: string; value: string | number; sub?: string; color?: StatColor;
 }) {
   const cfg: Record<StatColor, { icon: string; bar: string }> = {
-    green:  { icon: "bg-green-50  text-[#22c55e]", bar: "bg-[#22c55e]" },
-    blue:   { icon: "bg-blue-50   text-blue-600",   bar: "bg-blue-500" },
-    amber:  { icon: "bg-amber-50  text-amber-600",  bar: "bg-amber-500" },
+    green: { icon: "bg-green-50  text-[#22c55e]", bar: "bg-[#22c55e]" },
+    blue: { icon: "bg-blue-50   text-blue-600", bar: "bg-blue-500" },
+    amber: { icon: "bg-amber-50  text-amber-600", bar: "bg-amber-500" },
     purple: { icon: "bg-purple-50 text-purple-600", bar: "bg-purple-500" },
-    red:    { icon: "bg-red-50    text-red-600",    bar: "bg-red-500" },
-    gray:   { icon: "bg-gray-100  text-gray-600",   bar: "bg-gray-400" },
+    red: { icon: "bg-red-50    text-red-600", bar: "bg-red-500" },
+    gray: { icon: "bg-gray-100  text-gray-600", bar: "bg-gray-400" },
   };
   return (
     <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm flex flex-col gap-3 hover:shadow-md transition-shadow">
@@ -256,15 +257,15 @@ interface NavItem { id: string; icon: React.ReactNode; label: string; }
 
 const NAV_ITEMS: Record<SidebarRole, NavItem[]> = {
   admin: [
-    { id: "dashboard",  icon: <LayoutDashboard size={18} />, label: "Dashboard" },
-    { id: "products",   icon: <Package size={18} />,         label: "Products" },
-    { id: "categories", icon: <ClipboardList size={18} />,   label: "Categories" },
-    { id: "inventory",  icon: <BarChart3 size={18} />,       label: "Inventory" },
-    { id: "sales",      icon: <ShoppingCart size={18} />,    label: "Sales" },
-    { id: "customers",  icon: <User size={18} />,            label: "Customers" },
-    { id: "staff",      icon: <Users size={18} />,           label: "Staff" },
-    { id: "reports",    icon: <TrendingUp size={18} />,      label: "Reports" },
-    { id: "settings",   icon: <Settings size={18} />,        label: "Settings" },
+    { id: "dashboard", icon: <LayoutDashboard size={18} />, label: "Dashboard" },
+    { id: "products", icon: <Package size={18} />, label: "Products" },
+    { id: "categories", icon: <ClipboardList size={18} />, label: "Categories" },
+    { id: "inventory", icon: <BarChart3 size={18} />, label: "Inventory" },
+    { id: "sales", icon: <ShoppingCart size={18} />, label: "Sales" },
+    { id: "customers", icon: <User size={18} />, label: "Customers" },
+    { id: "staff", icon: <Users size={18} />, label: "Staff" },
+    { id: "reports", icon: <TrendingUp size={18} />, label: "Reports" },
+    { id: "settings", icon: <Settings size={18} />, label: "Settings" },
   ],
   staff: [
     { id: "dashboard", icon: <LayoutDashboard size={18} />, label: "Dashboard" },
@@ -297,8 +298,8 @@ function Sidebar({ role, activePage, onNavigate, onLogout, userName, pendingCoun
       {/* Brand */}
       <div className="px-5 py-5 border-b border-white/10">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[#22c55e] flex items-center justify-center shrink-0 shadow-md">
-            <Store size={18} className="text-white" />
+          <div className="w-10 h-10 rounded-xl overflow-hidden shrink-0 shadow-md">
+            <img src={logoImg} alt="SmartMart Logo" className="w-full h-full object-cover" />
           </div>
           <div className="min-w-0">
             <p className="text-white font-extrabold text-base leading-tight">SmartMart</p>
@@ -313,11 +314,10 @@ function Sidebar({ role, activePage, onNavigate, onLogout, userName, pendingCoun
           <button
             key={item.id}
             onClick={() => onNavigate(item.id)}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all ${
-              activePage === item.id
-                ? "bg-[#22c55e]/15 text-[#22c55e] border border-[#22c55e]/20"
-                : "text-gray-400 hover:bg-white/5 hover:text-gray-200"
-            }`}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all ${activePage === item.id
+              ? "bg-[#22c55e]/15 text-[#22c55e] border border-[#22c55e]/20"
+              : "text-gray-400 hover:bg-white/5 hover:text-gray-200"
+              }`}
           >
             {item.icon}
             <span className="flex-1 text-left">{item.label}</span>
@@ -354,10 +354,10 @@ function Sidebar({ role, activePage, onNavigate, onLogout, userName, pendingCoun
 // ─── Homepage ─────────────────────────────────────────────────────────────────
 
 const FEATURED = [
-  { emoji: "🥤", name: "Coca-Cola 500ml",    price: 40, category: "Non-Alcoholic Beverages" },
+  { emoji: "🥤", name: "Coca-Cola 500ml", price: 40, category: "Non-Alcoholic Beverages" },
   { emoji: "🍟", name: "Piattos Cheese 85g", price: 25, category: "Snacks" },
-  { emoji: "🍪", name: "Rebisco Crackers",   price: 10, category: "Snacks" },
-  { emoji: "🥛", name: "Eden Cheese 165g",   price: 95, category: "Dairy Products" },
+  { emoji: "🍪", name: "Rebisco Crackers", price: 10, category: "Snacks" },
+  { emoji: "🥛", name: "Eden Cheese 165g", price: 95, category: "Dairy Products" },
 ];
 
 
@@ -403,8 +403,8 @@ function LoginPage({ onLogin, onBack, onGoRegister }: { onLogin: (role: Role) =>
       <header className="bg-white border-b border-gray-100 shadow-sm">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           <button onClick={onBack} className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-[#22c55e] flex items-center justify-center shadow-sm">
-              <Store size={18} className="text-white" />
+            <div className="w-9 h-9 rounded-xl overflow-hidden shadow-sm shrink-0">
+              <img src={logoImg} alt="SmartMart Logo" className="w-full h-full object-cover" />
             </div>
             <span className="font-extrabold text-[#1f2937] text-lg tracking-tight">SmartMart</span>
           </button>
@@ -419,8 +419,8 @@ function LoginPage({ onLogin, onBack, onGoRegister }: { onLogin: (role: Role) =>
 
           {/* Brand header */}
           <div className="text-center mb-8">
-            <div className="w-16 h-16 rounded-2xl bg-[#22c55e] flex items-center justify-center mx-auto mb-4 shadow-lg">
-              <Store size={30} className="text-white" />
+            <div className="w-16 h-16 rounded-2xl overflow-hidden mx-auto mb-4 shadow-lg shrink-0">
+              <img src={logoImg} alt="SmartMart Logo" className="w-full h-full object-cover" />
             </div>
             <h1 className="text-2xl font-extrabold text-[#1f2937]">SmartMart</h1>
             <p className="text-gray-400 text-xs mt-0.5 font-semibold uppercase tracking-widest">Convenience Store Management System</p>
@@ -530,14 +530,14 @@ function RegisterPage({ onLogin: _onLogin, onBack, onGoLogin }: { onLogin: (role
   const { addPendingCustomer } = useStore();
   const [submitted, setSubmitted] = useState(false);
 
-  const [lastName,   setLastName]   = useState("");
-  const [firstName,  setFirstName]  = useState("");
+  const [lastName, setLastName] = useState("");
+  const [firstName, setFirstName] = useState("");
   const [middleName, setMiddleName] = useState("");
-  const [address,    setAddress]    = useState("");
-  const [dob,        setDob]        = useState("");
-  const [civilStatus,setCivilStatus]= useState("");
-  const [gender,     setGender]     = useState("");
-  const [phone,      setPhone]      = useState("");
+  const [address, setAddress] = useState("");
+  const [dob, setDob] = useState("");
+  const [civilStatus, setCivilStatus] = useState("");
+  const [gender, setGender] = useState("");
+  const [phone, setPhone] = useState("");
 
   const inputCls = "w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#22c55e]/30 focus:border-[#22c55e] transition-all";
   const selectCls = `${inputCls} text-[#1f2937]`;
@@ -624,8 +624,8 @@ function RegisterPage({ onLogin: _onLogin, onBack, onGoLogin }: { onLogin: (role
       <header className="bg-white border-b border-gray-200">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           <button onClick={onBack} className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-[#22c55e] flex items-center justify-center shadow-sm">
-              <Store size={18} className="text-white" />
+            <div className="w-9 h-9 rounded-xl overflow-hidden shadow-sm shrink-0">
+              <img src={logoImg} alt="SmartMart Logo" className="w-full h-full object-cover" />
             </div>
             <span className="font-extrabold text-[#1f2937] text-lg tracking-tight">SmartMart</span>
           </button>
@@ -779,22 +779,22 @@ function RegisterPage({ onLogin: _onLogin, onBack, onGoLogin }: { onLogin: (role
 }
 
 const CAT_META: Record<string, { emoji: string; desc: string }> = {
-  Snacks:                       { emoji: "🥨", desc: "Chips, crackers & more" },
-  "Non-Alcoholic Beverages":    { emoji: "🥤", desc: "Drinks, juice & coffee" },
-  "Alcoholic Beverages":        { emoji: "🍺", desc: "Beer & alcoholic drinks" },
-  "Instant Foods":              { emoji: "🍜", desc: "Noodles & ready meals" },
-  "Canned Goods":               { emoji: "🥫", desc: "Tuna, corned beef & more" },
-  "Bread & Bakery":             { emoji: "🍞", desc: "Loaf, rolls & pastries" },
-  "Candies & Chocolates":       { emoji: "🍬", desc: "Sweets & treats" },
-  "Dairy Products":             { emoji: "🥛", desc: "Milk, cheese & yogurt" },
-  "Cooking Essentials":         { emoji: "🍚", desc: "Rice, sauces & condiments" },
-  "Personal Care":              { emoji: "🧴", desc: "Soap, shampoo & more" },
-  "Health & Wellness":          { emoji: "💊", desc: "Medicine & supplements" },
-  "Household Essentials":       { emoji: "🧹", desc: "Cleaning & home supplies" },
-  "Baby Products":              { emoji: "👶", desc: "Diapers & baby care" },
-  "School & Office Supplies":   { emoji: "✏️", desc: "Pens, paper & stationery" },
-  "Frozen Foods":               { emoji: "🧊", desc: "Ice cream, hotdog & more" },
-  Miscellaneous:                { emoji: "📦", desc: "Other useful items" },
+  Snacks: { emoji: "🥨", desc: "Chips, crackers & more" },
+  "Non-Alcoholic Beverages": { emoji: "🥤", desc: "Drinks, juice & coffee" },
+  "Alcoholic Beverages": { emoji: "🍺", desc: "Beer & alcoholic drinks" },
+  "Instant Foods": { emoji: "🍜", desc: "Noodles & ready meals" },
+  "Canned Goods": { emoji: "🥫", desc: "Tuna, corned beef & more" },
+  "Bread & Bakery": { emoji: "🍞", desc: "Loaf, rolls & pastries" },
+  "Candies & Chocolates": { emoji: "🍬", desc: "Sweets & treats" },
+  "Dairy Products": { emoji: "🥛", desc: "Milk, cheese & yogurt" },
+  "Cooking Essentials": { emoji: "🍚", desc: "Rice, sauces & condiments" },
+  "Personal Care": { emoji: "🧴", desc: "Soap, shampoo & more" },
+  "Health & Wellness": { emoji: "💊", desc: "Medicine & supplements" },
+  "Household Essentials": { emoji: "🧹", desc: "Cleaning & home supplies" },
+  "Baby Products": { emoji: "👶", desc: "Diapers & baby care" },
+  "School & Office Supplies": { emoji: "✏️", desc: "Pens, paper & stationery" },
+  "Frozen Foods": { emoji: "🧊", desc: "Ice cream, hotdog & more" },
+  Miscellaneous: { emoji: "📦", desc: "Other useful items" },
 };
 
 // ─── Shared Store (single source of truth for all roles) ──────────────────────
@@ -823,10 +823,12 @@ type StoreValue = {
   storeInfo: StoreInfo;
   pendingCustomers: PendingCustomer[];
   registeredCustomers: RegisteredCustomer[];
+  transactions: TransactionItem[];
+  refreshData: () => Promise<void>;
   addProduct: (p: Omit<Product, "id" | "lowStock">) => void;
   addCategory: (name: string, emoji: string, desc: string) => void;
   updateStoreInfo: (info: StoreInfo) => void;
-  addPendingCustomer: (c: Omit<PendingCustomer, "id" | "submittedAt">) => void;
+  addPendingCustomer: (c: Partial<PendingCustomer> & Omit<PendingCustomer, "submittedAt">) => void;
   approvePendingCustomer: (id: string, username?: string, password?: string) => Promise<void>;
   denyPendingCustomer: (id: string) => void;
 };
@@ -849,15 +851,17 @@ function StoreProvider({ children }: { children: React.ReactNode }) {
   });
   const [pendingCustomers, setPendingCustomers] = useState<PendingCustomer[]>([]);
   const [registeredCustomers, setRegisteredCustomers] = useState<RegisteredCustomer[]>([]);
+  const [transactions, setTransactions] = useState<TransactionItem[]>([]);
 
   const refreshData = useCallback(async () => {
     try {
-      const [catsRes, prodsRes, settingsRes, pendingRes, registeredRes] = await Promise.allSettled([
+      const [catsRes, prodsRes, settingsRes, pendingRes, registeredRes, trxRes] = await Promise.allSettled([
         api.categories.getAll(),
         api.products.getAll(),
         api.settings.get(),
         api.customers.getPending(),
         api.customers.getRegistered(),
+        api.transactions.getAll(),
       ]);
 
       if (catsRes.status === "fulfilled" && catsRes.value.length > 0) {
@@ -900,6 +904,9 @@ function StoreProvider({ children }: { children: React.ReactNode }) {
       }
       if (registeredRes.status === "fulfilled") {
         setRegisteredCustomers(registeredRes.value);
+      }
+      if (trxRes.status === "fulfilled") {
+        setTransactions(trxRes.value);
       }
     } catch (e) {
       console.warn("Could not sync with backend server yet:", e);
@@ -975,8 +982,8 @@ function StoreProvider({ children }: { children: React.ReactNode }) {
   }, [refreshData]);
 
   const value = useMemo(
-    () => ({ products, categories, catMeta, storeInfo, pendingCustomers, registeredCustomers, addProduct, addCategory, updateStoreInfo, addPendingCustomer, approvePendingCustomer, denyPendingCustomer }),
-    [products, categories, catMeta, storeInfo, pendingCustomers, registeredCustomers, addProduct, addCategory, updateStoreInfo, addPendingCustomer, approvePendingCustomer, denyPendingCustomer],
+    () => ({ products, categories, catMeta, storeInfo, pendingCustomers, registeredCustomers, transactions, refreshData, addProduct, addCategory, updateStoreInfo, addPendingCustomer, approvePendingCustomer, denyPendingCustomer }),
+    [products, categories, catMeta, storeInfo, pendingCustomers, registeredCustomers, transactions, refreshData, addProduct, addCategory, updateStoreInfo, addPendingCustomer, approvePendingCustomer, denyPendingCustomer],
   );
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
@@ -988,10 +995,10 @@ function LoginScreen({ onLogin }: { onLogin: (role: Role) => void }) {
   const { storeInfo } = useStore();
   const [legalModal, setLegalModal] = useState<"privacy" | "terms" | null>(null);
 
-  const goLogin    = () => setPage("login");
+  const goLogin = () => setPage("login");
   const goRegister = () => setPage("register");
 
-  if (page === "login")    return <LoginPage    onLogin={onLogin} onBack={() => setPage("home")} onGoRegister={goRegister} />;
+  if (page === "login") return <LoginPage onLogin={onLogin} onBack={() => setPage("home")} onGoRegister={goRegister} />;
   if (page === "register") return <RegisterPage onLogin={onLogin} onBack={() => setPage("home")} onGoLogin={goLogin} />;
 
   return (
@@ -1002,8 +1009,8 @@ function LoginScreen({ onLogin }: { onLogin: (role: Role) => void }) {
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           {/* Logo */}
           <div className="flex items-center gap-2.5 shrink-0">
-            <div className="w-9 h-9 rounded-xl bg-[#22c55e] flex items-center justify-center shadow-sm">
-              <Store size={18} className="text-white" />
+            <div className="w-9 h-9 rounded-xl overflow-hidden shadow-sm shrink-0">
+              <img src={logoImg} alt="SmartMart Logo" className="w-full h-full object-cover" />
             </div>
             <span className="font-extrabold text-[#1f2937] text-lg tracking-tight">SmartMart</span>
           </div>
@@ -1043,16 +1050,6 @@ function LoginScreen({ onLogin }: { onLogin: (role: Role) => void }) {
           <p className="mt-6 text-gray-300 text-lg leading-relaxed max-w-2xl mx-auto">
             A smarter way to shop at your neighborhood convenience store. Create an account to browse products, check stock availability, and view your purchase history.
           </p>
-          <div className="mt-10 flex flex-wrap justify-center gap-4">
-            <button onClick={goLogin}
-              className="px-8 py-3.5 bg-white text-[#1f2937] font-bold rounded-xl hover:bg-gray-100 transition-all text-sm shadow-md">
-              Login
-            </button>
-            <button onClick={goRegister}
-              className="px-8 py-3.5 bg-[#22c55e] text-white font-bold rounded-xl hover:bg-[#16a34a] transition-all text-sm shadow-lg">
-              Create an Account
-            </button>
-          </div>
         </div>
       </section>
 
@@ -1067,9 +1064,9 @@ function LoginScreen({ onLogin }: { onLogin: (role: Role) => void }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {([
               ["📦", "Real-Time Product Availability", "Know if your favorite products are in stock before visiting."],
-              ["🛒", "Faster In-Store Shopping",       "Browse products in advance to save time at the store."],
-              ["🧾", "Digital Purchase History",       "View all your previous purchases anytime, anywhere."],
-              ["👤", "Secure Customer Account",        "Manage your profile and keep all shopping records safe."],
+              ["🛒", "Faster In-Store Shopping", "Browse products in advance to save time at the store."],
+              ["🧾", "Digital Purchase History", "View all your previous purchases anytime, anywhere."],
+              ["👤", "Secure Customer Account", "Manage your profile and keep all shopping records safe."],
             ] as [string, string, string][]).map(([icon, title, desc]) => (
               <div key={title} className="bg-[#f9fafb] rounded-2xl border border-gray-200 p-6 flex flex-col gap-3 hover:shadow-md hover:border-[#22c55e] transition-all">
                 <span className="text-4xl">{icon}</span>
@@ -1090,11 +1087,11 @@ function LoginScreen({ onLogin }: { onLogin: (role: Role) => void }) {
           </div>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-0">
             {([
-              ["1️⃣", "Create an Account",       "Register for free in seconds."],
-              ["2️⃣", "Browse Products",          "Explore 34+ products across 17 categories."],
-              ["3️⃣", "Visit the Store",          "Come in knowing exactly what you need."],
-              ["4️⃣", "Pay at the Cashier",       "Our staff processes your purchase via POS."],
-              ["5️⃣", "View Purchase History",    "Track all your transactions in your dashboard."],
+              ["1️⃣", "Create an Account", "Register for free in seconds."],
+              ["2️⃣", "Browse Products", "Explore 34+ products across 17 categories."],
+              ["3️⃣", "Visit the Store", "Come in knowing exactly what you need."],
+              ["4️⃣", "Pay at the Cashier", "Our staff processes your purchase via POS."],
+              ["5️⃣", "View Purchase History", "Track all your transactions in your dashboard."],
             ] as [string, string, string][]).map(([num, title, desc], i, arr) => (
               <div key={title} className="flex flex-col sm:flex-row items-center gap-0 flex-1">
                 <div className="flex flex-col items-center text-center px-4 py-2 flex-1">
@@ -1128,9 +1125,9 @@ function LoginScreen({ onLogin }: { onLogin: (role: Role) => void }) {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
             {([
-              ["📍", "Address",        storeInfo.address],
+              ["📍", "Address", storeInfo.address],
               ["📞", "Contact Number", `${storeInfo.contact}\n${storeInfo.email}`],
-              ["🕒", "Store Hours",    `Monday – Sunday\n${storeInfo.hours}`],
+              ["🕒", "Store Hours", `Monday – Sunday\n${storeInfo.hours}`],
             ] as [string, string, string][]).map(([icon, label, detail]) => (
               <div key={label} className="bg-white/5 border border-white/10 rounded-2xl p-6 flex flex-col gap-3">
                 <span className="text-3xl">{icon}</span>
@@ -1148,8 +1145,8 @@ function LoginScreen({ onLogin }: { onLogin: (role: Role) => void }) {
           <div className="flex flex-col md:flex-row justify-between gap-8 pb-8 border-b border-white/10">
             <div>
               <div className="flex items-center gap-2 mb-3">
-                <div className="w-8 h-8 rounded-lg bg-[#22c55e] flex items-center justify-center">
-                  <Store size={15} className="text-white" />
+                <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0">
+                  <img src={logoImg} alt="SmartMart Logo" className="w-full h-full object-cover" />
                 </div>
                 <span className="font-extrabold text-white text-base">SmartMart</span>
               </div>
@@ -1469,11 +1466,11 @@ function AdminDashboard({ products, categories = CATEGORIES }: { products: Produ
 
       {/* 5 Stat Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-        <StatCard icon={<Package size={20} />}       label="Total Products" value={totalProductsCount}   sub={`${totalCategoriesCount} categories`}     color="green"  />
-        <StatCard icon={<TrendingUp size={20} />}    label="Today's Sales"  value={peso(todayTotal)}       sub={`${summary?.today_transactions ?? transactions.length} transactions`}  color="blue"   />
-        <StatCard icon={<User size={20} />}          label="Customers"      value={totalCustomersCount} sub="Registered"                             color="amber"  />
-        <StatCard icon={<AlertTriangle size={20} />} label="Low Stock"      value={lowStockCount}       sub="Need restocking"                        color="red"    />
-        <StatCard icon={<Users size={20} />}         label="Staff Members"  value={activeStaffCount}     sub="Active accounts"                        color="gray"   />
+        <StatCard icon={<Package size={20} />} label="Total Products" value={totalProductsCount} sub={`${totalCategoriesCount} categories`} color="green" />
+        <StatCard icon={<TrendingUp size={20} />} label="Today's Sales" value={peso(todayTotal)} sub={`${summary?.today_transactions ?? transactions.length} transactions`} color="blue" />
+        <StatCard icon={<User size={20} />} label="Customers" value={totalCustomersCount} sub="Registered" color="amber" />
+        <StatCard icon={<AlertTriangle size={20} />} label="Low Stock" value={lowStockCount} sub="Need restocking" color="red" />
+        <StatCard icon={<Users size={20} />} label="Staff Members" value={activeStaffCount} sub="Active accounts" color="gray" />
       </div>
 
       {/* Chart + Best Sellers */}
@@ -1483,7 +1480,7 @@ function AdminDashboard({ products, categories = CATEGORIES }: { products: Produ
           <div className="flex items-center justify-between mb-5">
             <h3 className="font-extrabold text-[#1f2937]">Sales Overview</h3>
             <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
-              {(["daily","weekly","monthly","yearly"] as const).map(tab => (
+              {(["daily", "weekly", "monthly", "yearly"] as const).map(tab => (
                 <button key={tab} onClick={() => setChartTab(tab)}
                   className={`px-3 py-1 rounded-lg text-xs font-bold transition-all capitalize ${chartTab === tab ? "bg-white text-[#1f2937] shadow-sm" : "text-gray-400 hover:text-gray-600"}`}>
                   {tab}
@@ -1514,11 +1511,10 @@ function AdminDashboard({ products, categories = CATEGORIES }: { products: Produ
             <div className="space-y-3">
               {summary.best_sellers.map((item, i) => (
                 <div key={item.id || item.name} className="flex items-center gap-3">
-                  <span className={`w-6 h-6 rounded-full text-xs font-extrabold flex items-center justify-center shrink-0 ${
-                    i === 0 ? "bg-amber-100 text-amber-700 border border-amber-200" :
+                  <span className={`w-6 h-6 rounded-full text-xs font-extrabold flex items-center justify-center shrink-0 ${i === 0 ? "bg-amber-100 text-amber-700 border border-amber-200" :
                     i === 1 ? "bg-slate-100 text-slate-700 border border-slate-200" :
-                    i === 2 ? "bg-orange-100 text-orange-700 border border-orange-200" : "bg-gray-50 text-gray-600"
-                  }`}>
+                      i === 2 ? "bg-orange-100 text-orange-700 border border-orange-200" : "bg-gray-50 text-gray-600"
+                    }`}>
                     {i + 1}
                   </span>
                   <div className="flex-1 min-w-0">
@@ -1683,7 +1679,7 @@ function ProductsPage({ products, categories = CATEGORIES, onAddProduct }: { pro
                 <td className="px-4 py-3">
                   <span className={`px-2 py-0.5 rounded-md text-xs font-semibold ${CAT_COLORS[p.category] ?? "bg-gray-100 text-gray-700"}`}>{p.category}</span>
                 </td>
-<td className="px-4 py-3 text-right text-sm font-bold text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{peso(p.price)}</td>
+                <td className="px-4 py-3 text-right text-sm font-bold text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{peso(p.price)}</td>
                 <td className={`px-4 py-3 text-center text-sm font-bold ${p.lowStock ? "text-red-500" : "text-foreground"}`} style={{ fontFamily: "'DM Mono', monospace" }}>{p.stock}</td>
                 <td className="px-4 py-3 text-left">{p.lowStock ? <Badge variant="danger">Low Stock</Badge> : <Badge variant="success">In Stock</Badge>}</td>
               </tr>
@@ -2086,7 +2082,7 @@ function CustomersPage() {
 
   const handleApprove = async () => {
     if (!newEmail.trim()) { toast.error("Please enter a username."); return; }
-    if (!newPw.trim())    { toast.error("Please enter a temporary password."); return; }
+    if (!newPw.trim()) { toast.error("Please enter a temporary password."); return; }
     try {
       const targetName = `${approveTarget!.firstName} ${approveTarget!.lastName}`;
       const username = newEmail;
@@ -2587,11 +2583,12 @@ function ReportsPage({ products = [] }: { products?: Product[] }) {
 // ─── POS ──────────────────────────────────────────────────────────────────────
 
 function POSPage({ products, categories = CATEGORIES }: { products: Product[]; categories?: string[] }) {
+  const { registeredCustomers, refreshData } = useStore();
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [custSearch, setCustSearch] = useState("");
-  const [linkedCustomer, setLinkedCustomer] = useState<typeof CUSTOMERS_LIST[0] | null>(null);
+  const [linkedCustomer, setLinkedCustomer] = useState<RegisteredCustomer | null>(null);
   const [cashAmount, setCashAmount] = useState("");
   const [showReceipt, setShowReceipt] = useState(false);
   const [completedTrx, setCompletedTrx] = useState<Transaction | null>(null);
@@ -2620,22 +2617,46 @@ function POSPage({ products, categories = CATEGORIES }: { products: Product[]; c
     setCart(prev => prev.map(i => i.product.id === id ? { ...i, qty: i.qty + delta } : i).filter(i => i.qty > 0));
   };
 
-  const custResults = custSearch.length > 1
-    ? CUSTOMERS_LIST.filter(c => c.name.toLowerCase().includes(custSearch.toLowerCase()) || c.id.toLowerCase().includes(custSearch.toLowerCase()))
+  const custResults = custSearch.trim().length > 0
+    ? registeredCustomers.filter(c =>
+        (c.full_name || "").toLowerCase().includes(custSearch.toLowerCase()) ||
+        (c.customer_code || "").toLowerCase().includes(custSearch.toLowerCase()) ||
+        (c.username || "").toLowerCase().includes(custSearch.toLowerCase()) ||
+        (c.phone || "").toLowerCase().includes(custSearch.toLowerCase())
+      )
     : [];
 
-  const completeTransaction = () => {
-    const trx: Transaction = {
-      id: `TRX-2026-${Math.floor(Math.random() * 9000) + 1000}`,
-      customer: linkedCustomer?.name ?? "Walk-in",
-      customerId: linkedCustomer?.id,
-      items: cart.map(i => ({ name: i.product.name, qty: i.qty, price: i.product.price })),
-      total, cash, change,
-      date: new Date().toLocaleString("en-PH", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" }),
-      cashier: "Maria Santos",
-    };
-    setCompletedTrx(trx);
-    setShowReceipt(true);
+  const completeTransaction = async () => {
+    try {
+      const apiItems = cart.map(i => ({ product_id: i.product.id, quantity: i.qty }));
+      let resTrx: any = null;
+      try {
+        resTrx = await api.transactions.create({
+          customer_id: linkedCustomer ? linkedCustomer.id : null,
+          cashier_id: 1,
+          cash_tendered: cash,
+          items: apiItems,
+        });
+      } catch (e) {
+        console.warn("Backend transaction save error, fallback to local display:", e);
+      }
+
+      const trx: Transaction = {
+        id: resTrx?.receipt_no || `TRX-2026-${Math.floor(Math.random() * 9000) + 1000}`,
+        customer: linkedCustomer?.full_name ?? "Walk-in",
+        customerId: linkedCustomer?.customer_code,
+        items: cart.map(i => ({ name: i.product.name, qty: i.qty, price: i.product.price })),
+        total, cash, change: resTrx ? Number(resTrx.change_amount) : change,
+        date: resTrx ? resTrx.date : new Date().toLocaleString("en-PH", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" }),
+        cashier: resTrx ? resTrx.cashier : (getSavedUser()?.name || "Cashier"),
+      };
+      setCompletedTrx(trx);
+      setShowReceipt(true);
+      toast.success(linkedCustomer ? `Transaction completed for ${linkedCustomer.full_name}!` : "Transaction completed!");
+      await refreshData();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to complete transaction");
+    }
   };
 
   const clearTransaction = () => {
@@ -2725,25 +2746,25 @@ function POSPage({ products, categories = CATEGORIES }: { products: Product[]; c
           <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Customer (Optional)</p>
           {linkedCustomer ? (
             <div className="flex items-center gap-2 p-2.5 bg-emerald-50 rounded-xl border border-emerald-200">
-              <div className="w-7 h-7 rounded-full bg-emerald-500 flex items-center justify-center text-white text-xs font-bold shrink-0">{linkedCustomer.name.charAt(0)}</div>
+              <div className="w-7 h-7 rounded-full bg-emerald-500 flex items-center justify-center text-white text-xs font-bold shrink-0">{(linkedCustomer.full_name || "C").charAt(0)}</div>
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold text-foreground">{linkedCustomer.name}</p>
-                <p className="text-xs text-muted-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{linkedCustomer.id}</p>
+                <p className="text-xs font-bold text-foreground truncate">{linkedCustomer.full_name}</p>
+                <p className="text-xs text-muted-foreground truncate" style={{ fontFamily: "'DM Mono', monospace" }}>{linkedCustomer.customer_code} • @{linkedCustomer.username}</p>
               </div>
-              <button onClick={() => { setLinkedCustomer(null); setCustSearch(""); }} className="text-muted-foreground hover:text-red-500 transition-colors"><X size={14} /></button>
+              <button onClick={() => { setLinkedCustomer(null); setCustSearch(""); }} className="text-muted-foreground hover:text-red-500 transition-colors shrink-0"><X size={14} /></button>
             </div>
           ) : (
             <div className="relative">
               <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <input value={custSearch} onChange={e => setCustSearch(e.target.value)} placeholder="Search customer name or ID..." className="w-full pl-7 pr-3 py-2 rounded-xl border border-border bg-background text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500/30" />
               {custResults.length > 0 && (
-                <div className="absolute top-full left-0 right-0 bg-card border border-border rounded-xl shadow-xl mt-1 z-10 overflow-hidden">
+                <div className="absolute bottom-full mb-1 left-0 right-0 bg-card border border-border rounded-xl shadow-xl z-20 max-h-48 overflow-y-auto">
                   {custResults.map(c => (
-                    <button key={c.id} onClick={() => { setLinkedCustomer(c); setCustSearch(""); }} className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-muted transition-colors text-left">
-                      <div className="w-6 h-6 rounded-full bg-purple-100 flex items-center justify-center text-purple-700 text-xs font-bold shrink-0">{c.name.charAt(0)}</div>
-                      <div>
-                        <p className="text-xs font-semibold text-foreground">{c.name}</p>
-                        <p className="text-xs text-muted-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{c.id}</p>
+                    <button key={c.id} onClick={() => { setLinkedCustomer(c); setCustSearch(""); }} className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-muted transition-colors text-left border-b border-border/50 last:border-0">
+                      <div className="w-6 h-6 rounded-full bg-purple-100 flex items-center justify-center text-purple-700 text-xs font-bold shrink-0">{(c.full_name || "C").charAt(0)}</div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-semibold text-foreground truncate">{c.full_name}</p>
+                        <p className="text-xs text-muted-foreground truncate" style={{ fontFamily: "'DM Mono', monospace" }}>{c.customer_code} • @{c.username}</p>
                       </div>
                     </button>
                   ))}
@@ -2850,7 +2871,7 @@ function POSPage({ products, categories = CATEGORIES }: { products: Product[]; c
 
 function StaffDashboard({ onNavigate, products = INITIAL_PRODUCTS }: { onNavigate: (p: StaffPage) => void; products?: Product[] }) {
   const todayTotal = TRANSACTIONS.reduce((s, t) => s + t.total, 0);
-  const lowStock   = products.filter(p => p.lowStock).length;
+  const lowStock = products.filter(p => p.lowStock).length;
 
   return (
     <div className="p-6 space-y-6">
@@ -2865,7 +2886,7 @@ function StaffDashboard({ onNavigate, products = INITIAL_PRODUCTS }: { onNavigat
         <StatCard icon={<Package size={20} />} label="Products Available" value={products.length} sub={`${lowStock} low on stock`} color="purple" />
       </div>
 
-<div className="bg-card rounded-2xl border border-border p-5">
+      <div className="bg-card rounded-2xl border border-border p-5">
         <h3 className="font-extrabold text-foreground mb-4">Today's Transactions</h3>
         <div className="space-y-2.5">
           {TRANSACTIONS.map(t => (
@@ -2892,40 +2913,72 @@ function StaffDashboard({ onNavigate, products = INITIAL_PRODUCTS }: { onNavigat
 // ─── Transactions Page ────────────────────────────────────────────────────────
 
 function TransactionsPage() {
-  const [selected, setSelected] = useState<Transaction | null>(null);
+  const { transactions, refreshData } = useStore();
+  const [selected, setSelected] = useState<TransactionItem | null>(null);
+  const [selectedItems, setSelectedItems] = useState<Array<{ name: string; qty: number; price: number }>>([]);
+  const [loadingItems, setLoadingItems] = useState(false);
+
+  useEffect(() => {
+    refreshData();
+  }, [refreshData]);
+
+  const handleSelectTransaction = async (t: TransactionItem) => {
+    setSelected(t);
+    setLoadingItems(true);
+    try {
+      const items: any = await api.transactions.getItems(t.id);
+      setSelectedItems(items.map((i: any) => ({
+        name: i.product_name,
+        qty: i.quantity,
+        price: Number(i.unit_price)
+      })));
+    } catch {
+      setSelectedItems([]);
+    } finally {
+      setLoadingItems(false);
+    }
+  };
 
   return (
     <div className="p-6 space-y-5">
       <div>
         <h1 className="text-2xl font-extrabold text-foreground">Transactions</h1>
-        <p className="text-muted-foreground text-sm">Today — {TRANSACTIONS.length} records</p>
+        <p className="text-muted-foreground text-sm">Total — {transactions.length} records</p>
       </div>
 
-      <div className="bg-card rounded-2xl border border-border overflow-hidden">
+      <div className="bg-card rounded-2xl border border-border overflow-hidden shadow-sm">
         <table className="w-full">
           <thead>
             <tr className="border-b border-border bg-muted/40">
-              <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Transaction ID</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Receipt No</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Customer</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Time</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Cashier</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Date / Time</th>
               <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Total</th>
               <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
               <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {TRANSACTIONS.map(t => (
-              <tr key={t.id} className="hover:bg-muted/20 transition-colors">
-                <td className="px-4 py-3 text-sm font-bold text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{t.id}</td>
-                <td className="px-4 py-3 text-sm text-foreground">{t.customer}</td>
-                <td className="px-4 py-3 text-sm text-muted-foreground">{t.date.split(" ").slice(-2).join(" ")}</td>
-                <td className="px-4 py-3 text-right text-sm font-extrabold text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{peso(t.total)}</td>
-                <td className="px-4 py-3 text-center"><Badge variant="success">Completed</Badge></td>
-                <td className="px-4 py-3 text-right">
-                  <button onClick={() => setSelected(t)} className="px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors">View Receipt</button>
-                </td>
+            {transactions.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="text-center py-8 text-muted-foreground text-sm">No transactions found</td>
               </tr>
-            ))}
+            ) : (
+              transactions.map(t => (
+                <tr key={t.id} className="hover:bg-muted/20 transition-colors">
+                  <td className="px-4 py-3 text-sm font-bold text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{t.receipt_no}</td>
+                  <td className="px-4 py-3 text-sm font-medium text-foreground">{t.customer}</td>
+                  <td className="px-4 py-3 text-sm text-muted-foreground">{t.cashier}</td>
+                  <td className="px-4 py-3 text-sm text-muted-foreground">{t.date}</td>
+                  <td className="px-4 py-3 text-right text-sm font-extrabold text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{peso(Number(t.total_amount))}</td>
+                  <td className="px-4 py-3 text-center"><Badge variant="success">Completed</Badge></td>
+                  <td className="px-4 py-3 text-right">
+                    <button onClick={() => handleSelectTransaction(t)} className="px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors">View Receipt</button>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
@@ -2935,10 +2988,10 @@ function TransactionsPage() {
           <div className="bg-card rounded-2xl border border-border p-6 w-full max-w-md shadow-2xl">
             <div className="flex items-center justify-between mb-5">
               <div>
-                <h3 className="font-extrabold text-lg text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{selected.id}</h3>
+                <h3 className="font-extrabold text-lg text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{selected.receipt_no}</h3>
                 <p className="text-sm text-muted-foreground">{selected.date}</p>
               </div>
-              <button onClick={() => setSelected(null)} className="p-1.5 hover:bg-muted rounded-lg transition-colors"><X size={18} /></button>
+              <button onClick={() => { setSelected(null); setSelectedItems([]); }} className="p-1.5 hover:bg-muted rounded-lg transition-colors"><X size={18} /></button>
             </div>
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
@@ -2953,23 +3006,27 @@ function TransactionsPage() {
               </div>
               <div>
                 <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Items</p>
-                <div className="space-y-2">
-                  {selected.items.map(item => (
-                    <div key={item.name} className="flex justify-between text-sm">
-                      <span className="text-foreground">{item.name} <span className="text-muted-foreground">×{item.qty}</span></span>
-                      <span className="font-bold text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{peso(item.price * item.qty)}</span>
-                    </div>
-                  ))}
-                </div>
+                {loadingItems ? (
+                  <p className="text-xs text-muted-foreground">Loading receipt details...</p>
+                ) : (
+                  <div className="space-y-2">
+                    {selectedItems.map(item => (
+                      <div key={item.name} className="flex justify-between text-sm">
+                        <span className="text-foreground">{item.name} <span className="text-muted-foreground">×{item.qty}</span></span>
+                        <span className="font-bold text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{peso(item.price * item.qty)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="border-t border-border pt-3 space-y-1.5">
-                <div className="flex justify-between font-extrabold text-foreground"><span>Total</span><span style={{ fontFamily: "'DM Mono', monospace" }}>{peso(selected.total)}</span></div>
-                <div className="flex justify-between text-sm text-muted-foreground"><span>Cash</span><span style={{ fontFamily: "'DM Mono', monospace" }}>{peso(selected.cash)}</span></div>
-                <div className="flex justify-between text-sm font-extrabold text-emerald-600"><span>Change</span><span style={{ fontFamily: "'DM Mono', monospace" }}>{peso(selected.change)}</span></div>
+                <div className="flex justify-between font-extrabold text-foreground"><span>Total</span><span style={{ fontFamily: "'DM Mono', monospace" }}>{peso(Number(selected.total_amount))}</span></div>
+                <div className="flex justify-between text-sm text-muted-foreground"><span>Cash</span><span style={{ fontFamily: "'DM Mono', monospace" }}>{peso(Number(selected.cash_tendered))}</span></div>
+                <div className="flex justify-between text-sm font-extrabold text-emerald-600"><span>Change</span><span style={{ fontFamily: "'DM Mono', monospace" }}>{peso(Number(selected.change_amount))}</span></div>
               </div>
               <div className="flex items-center justify-between">
                 <Badge variant="success">Completed</Badge>
-                <button className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+                <button onClick={() => window.print()} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
                   <Printer size={14} /> Print Receipt
                 </button>
               </div>
@@ -3075,10 +3132,40 @@ function CustomerBrowse({ products, categories = CATEGORIES }: { products: Produ
 // ─── Customer History ─────────────────────────────────────────────────────────
 
 function CustomerHistory() {
-  const user = getSavedUser();
-  const customerName = user?.name || "Customer";
-  const [selected, setSelected] = useState<Transaction | null>(null);
-  const myTrx = TRANSACTIONS.filter(t => t.customer === customerName);
+  const [myTrx, setMyTrx] = useState<TransactionItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState<TransactionItem | null>(null);
+  const [selectedItems, setSelectedItems] = useState<Array<{ name: string; qty: number; price: number }>>([]);
+
+  const loadHistory = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await api.transactions.getMyHistory();
+      setMyTrx(res);
+    } catch (e) {
+      console.warn("Error fetching customer purchase history:", e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadHistory();
+  }, [loadHistory]);
+
+  const handleSelectReceipt = async (t: TransactionItem) => {
+    setSelected(t);
+    try {
+      const items: any = await api.transactions.getItems(t.id);
+      setSelectedItems(items.map((i: any) => ({
+        name: i.product_name,
+        qty: i.quantity,
+        price: Number(i.unit_price)
+      })));
+    } catch {
+      setSelectedItems([]);
+    }
+  };
 
   return (
     <div className="p-6 space-y-5">
@@ -3087,7 +3174,11 @@ function CustomerHistory() {
         <p className="text-muted-foreground text-sm">{myTrx.length} transactions on record</p>
       </div>
 
-      {myTrx.length === 0 ? (
+      {loading ? (
+        <div className="flex justify-center items-center h-48 text-muted-foreground">
+          <p className="text-sm">Loading purchase history...</p>
+        </div>
+      ) : myTrx.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-56 text-muted-foreground">
           <Receipt size={40} className="opacity-20 mb-3" />
           <p className="font-semibold">No purchases yet</p>
@@ -3096,28 +3187,21 @@ function CustomerHistory() {
       ) : (
         <div className="space-y-3">
           {myTrx.map(t => (
-            <div key={t.id} className="bg-card rounded-2xl border border-border p-5">
+            <div key={t.id} className="bg-card rounded-2xl border border-border p-5 shadow-sm hover:border-emerald-200 transition-colors">
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="font-extrabold text-foreground text-sm" style={{ fontFamily: "'DM Mono', monospace" }}>{t.id}</p>
+                  <p className="font-extrabold text-foreground text-sm" style={{ fontFamily: "'DM Mono', monospace" }}>{t.receipt_no}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">{t.date}</p>
+                  <p className="text-xs text-muted-foreground">Cashier: {t.cashier}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-xl font-extrabold text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{peso(t.total)}</p>
+                  <p className="text-xl font-extrabold text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{peso(Number(t.total_amount))}</p>
                   <Badge variant="success">Completed</Badge>
                 </div>
               </div>
-              <div className="mt-3 pt-3 border-t border-border">
-                <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Items Purchased</p>
-                <div className="flex flex-wrap gap-2">
-                  {t.items.map(item => (
-                    <span key={item.name} className="text-xs px-2.5 py-1 bg-muted rounded-lg text-muted-foreground">{item.name} ×{item.qty}</span>
-                  ))}
-                </div>
-              </div>
-              <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-                <span style={{ fontFamily: "'DM Mono', monospace" }}>Cash: {peso(t.cash)} · Change: {peso(t.change)}</span>
-                <button onClick={() => setSelected(t)} className="text-emerald-600 font-bold hover:underline">View Receipt</button>
+              <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground pt-3 border-t border-border">
+                <span style={{ fontFamily: "'DM Mono', monospace" }}>Cash: {peso(Number(t.cash_tendered))} · Change: {peso(Number(t.change_amount))}</span>
+                <button onClick={() => handleSelectReceipt(t)} className="text-emerald-600 font-bold hover:underline">View Receipt</button>
               </div>
             </div>
           ))}
@@ -3130,15 +3214,16 @@ function CustomerHistory() {
             <div className="bg-emerald-600 p-5 text-center text-white">
               <Receipt size={32} className="mx-auto mb-1.5" />
               <h3 className="font-extrabold">Official Receipt</h3>
-              <p className="text-emerald-200 text-sm" style={{ fontFamily: "'DM Mono', monospace" }}>{selected.id}</p>
+              <p className="text-emerald-200 text-sm" style={{ fontFamily: "'DM Mono', monospace" }}>{selected.receipt_no}</p>
             </div>
             <div className="p-5 space-y-3" style={{ fontFamily: "'DM Mono', monospace" }}>
               <div className="text-center border-b border-dashed pb-3">
                 <p className="font-extrabold text-lg">SmartMart</p>
                 <p className="text-xs text-muted-foreground">{selected.date}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Cashier: {selected.cashier}</p>
               </div>
               <div className="space-y-1.5">
-                {selected.items.map(item => (
+                {selectedItems.map(item => (
                   <div key={item.name} className="flex justify-between text-xs text-foreground">
                     <span>{item.name} ×{item.qty}</span>
                     <span>{peso(item.price * item.qty)}</span>
@@ -3146,14 +3231,14 @@ function CustomerHistory() {
                 ))}
               </div>
               <div className="border-t border-dashed pt-3 space-y-1.5 text-sm">
-                <div className="flex justify-between font-extrabold text-foreground"><span>TOTAL</span><span>{peso(selected.total)}</span></div>
-                <div className="flex justify-between text-xs text-muted-foreground"><span>Cash</span><span>{peso(selected.cash)}</span></div>
-                <div className="flex justify-between font-extrabold text-emerald-600 text-sm"><span>Change</span><span>{peso(selected.change)}</span></div>
+                <div className="flex justify-between font-extrabold text-foreground"><span>TOTAL</span><span>{peso(Number(selected.total_amount))}</span></div>
+                <div className="flex justify-between text-xs text-muted-foreground"><span>Cash</span><span>{peso(Number(selected.cash_tendered))}</span></div>
+                <div className="flex justify-between font-extrabold text-emerald-600 text-sm"><span>Change</span><span>{peso(Number(selected.change_amount))}</span></div>
               </div>
               <p className="text-center text-xs text-muted-foreground border-t border-dashed pt-3">Thank you for shopping at SmartMart!</p>
             </div>
             <div className="p-4">
-              <button onClick={() => setSelected(null)} className="w-full py-2.5 bg-emerald-600 text-white rounded-2xl text-sm font-bold hover:bg-emerald-700 transition-colors">Close</button>
+              <button onClick={() => { setSelected(null); setSelectedItems([]); }} className="w-full py-2.5 bg-emerald-600 text-white rounded-2xl text-sm font-bold hover:bg-emerald-700 transition-colors">Close</button>
             </div>
           </div>
         </div>
@@ -3483,8 +3568,8 @@ function AdminCategoriesPage({
             <tbody className="divide-y divide-gray-100">
               {categories.map(cat => {
                 const catProds = products.filter(p => p.category === cat);
-                const meta     = catMeta[cat];
-                const active   = selectedCat === cat;
+                const meta = catMeta[cat];
+                const active = selectedCat === cat;
                 return (
                   <tr key={cat} className={`transition-colors ${active ? "bg-green-50" : "hover:bg-gray-50"}`}>
                     <td className="px-5 py-3.5">
@@ -3595,7 +3680,7 @@ function AdminSalesPage({ transactions }: { transactions: Transaction[] }) {
       </div>
       {/* Filter tabs */}
       <div className="flex gap-2">
-        {(["today","week","month"] as const).map(f => (
+        {(["today", "week", "month"] as const).map(f => (
           <button key={f} onClick={() => setFilter(f)}
             className={`px-4 py-2 rounded-xl text-sm font-bold transition-all capitalize ${filter === f ? "bg-[#22c55e] text-white shadow-sm" : "bg-white border border-gray-200 text-gray-500 hover:bg-gray-50"}`}>
             {f === "today" ? "Today" : f === "week" ? "This Week" : "This Month"}
@@ -3604,9 +3689,9 @@ function AdminSalesPage({ transactions }: { transactions: Transaction[] }) {
       </div>
       {/* Summary */}
       <div className="grid grid-cols-3 gap-4">
-        <StatCard icon={<TrendingUp size={20} />} label="Total Revenue"    value={peso(total)}             sub="All transactions"       color="green"  />
-        <StatCard icon={<Receipt size={20} />}    label="Transactions"     value={transactions.length}     sub="Completed sales"        color="blue"   />
-        <StatCard icon={<User size={20} />}       label="Unique Customers" value={new Set(transactions.map(t => t.customer)).size} sub="Including walk-ins" color="purple" />
+        <StatCard icon={<TrendingUp size={20} />} label="Total Revenue" value={peso(total)} sub="All transactions" color="green" />
+        <StatCard icon={<Receipt size={20} />} label="Transactions" value={transactions.length} sub="Completed sales" color="blue" />
+        <StatCard icon={<User size={20} />} label="Unique Customers" value={new Set(transactions.map(t => t.customer)).size} sub="Including walk-ins" color="purple" />
       </div>
       {/* Table */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
@@ -3700,8 +3785,8 @@ function AdminSettingsPage() {
   );
 
   const tabs = [
-    { id: "store" as const,         label: "Store Info",      icon: <Store size={15} /> },
-    { id: "account" as const,       label: "Account",         icon: <User size={15} /> },
+    { id: "store" as const, label: "Store Info", icon: <Store size={15} /> },
+    { id: "account" as const, label: "Account", icon: <User size={15} /> },
   ];
 
   return (
@@ -3851,15 +3936,15 @@ function AdminLayout({ onLogout }: { onLogout: () => void }) {
 
   const renderPage = () => {
     switch (page) {
-      case "dashboard":  return <AdminDashboard products={products} categories={categories} />;
-      case "products":   return <ProductsPage products={products} categories={categories} onAddProduct={handleAddProduct} />;
+      case "dashboard": return <AdminDashboard products={products} categories={categories} />;
+      case "products": return <ProductsPage products={products} categories={categories} onAddProduct={handleAddProduct} />;
       case "categories": return <AdminCategoriesPage products={products} categories={categories} catMeta={catMeta} onAddCategory={handleAddCategory} />;
-      case "inventory":  return <InventoryPage products={products} categories={categories} catMeta={catMeta} />;
-      case "sales":      return <AdminSalesPage transactions={TRANSACTIONS} />;
-      case "staff":      return <AdminStaffPage />;
-      case "customers":  return <CustomersPage />;
-      case "reports":    return <ReportsPage products={products} />;
-      case "settings":   return <AdminSettingsPage />;
+      case "inventory": return <InventoryPage products={products} categories={categories} catMeta={catMeta} />;
+      case "sales": return <AdminSalesPage transactions={TRANSACTIONS} />;
+      case "staff": return <AdminStaffPage />;
+      case "customers": return <CustomersPage />;
+      case "reports": return <ReportsPage products={products} />;
+      case "settings": return <AdminSettingsPage />;
     }
   };
 
