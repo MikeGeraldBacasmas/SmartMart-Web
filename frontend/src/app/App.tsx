@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, createContext, useContext, useEffect } from "react";
 import { Toaster, toast } from "sonner";
-import { api, getSavedUser, UserPayload, RegisteredCustomer, DashboardSummary, TransactionItem, StaffItem } from "../api";
+import { api, getSavedUser, UserPayload, RegisteredCustomer, CustomerProfileData, DashboardSummary, TransactionItem, StaffItem } from "../api";
 import logoImg from "../assets/SmartMart_Logo.jpg";
 import {
   LayoutDashboard, Package, ShoppingCart, Users, BarChart3,
@@ -3251,10 +3251,28 @@ function CustomerHistory() {
 
 function CustomerProfile() {
   const user = getSavedUser();
-  const name = user?.name || "Customer Account";
   const username = user?.username || "";
-  const joined = user?.joined || "Member";
 
+  // Profile data from backend
+  const [profile, setProfile] = useState<CustomerProfileData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Edit mode
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState({
+    first_name: "",
+    last_name: "",
+    middle_name: "",
+    address: "",
+    phone: "",
+    gender: "",
+    civil_status: "",
+    date_of_birth: "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [profileMsg, setProfileMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // Password state
   const [showAllPw, setShowAllPw] = useState(false);
   const [curPw, setCurPw] = useState("");
   const [newPw, setNewPw] = useState("");
@@ -3262,6 +3280,84 @@ function CustomerProfile() {
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
   const [updating, setUpdating] = useState(false);
+
+  // Fetch profile on mount
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const data = await api.customers.getMyProfile();
+        if (mounted) setProfile(data);
+      } catch (err: any) {
+        console.error("Failed to load profile:", err);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
+
+  const startEditing = () => {
+    if (!profile) return;
+    setEditForm({
+      first_name: profile.first_name,
+      last_name: profile.last_name,
+      middle_name: profile.middle_name || "",
+      address: profile.address,
+      phone: profile.phone,
+      gender: profile.gender,
+      civil_status: profile.civil_status,
+      date_of_birth: profile.date_of_birth,
+    });
+    setEditing(true);
+    setProfileMsg(null);
+  };
+
+  const cancelEditing = () => {
+    setEditing(false);
+    setProfileMsg(null);
+  };
+
+  const handleSaveProfile = async () => {
+    setProfileMsg(null);
+    if (!editForm.first_name.trim()) { setProfileMsg({ type: "error", text: "First name is required." }); return; }
+    if (!editForm.last_name.trim()) { setProfileMsg({ type: "error", text: "Last name is required." }); return; }
+    if (!editForm.address.trim()) { setProfileMsg({ type: "error", text: "Address is required." }); return; }
+    if (!editForm.phone.trim()) { setProfileMsg({ type: "error", text: "Phone is required." }); return; }
+    if (!editForm.date_of_birth) { setProfileMsg({ type: "error", text: "Date of birth is required." }); return; }
+    if (!editForm.gender) { setProfileMsg({ type: "error", text: "Gender is required." }); return; }
+    if (!editForm.civil_status) { setProfileMsg({ type: "error", text: "Civil status is required." }); return; }
+
+    setSaving(true);
+    try {
+      const result = await api.customers.updateMyProfile({
+        first_name: editForm.first_name.trim(),
+        last_name: editForm.last_name.trim(),
+        middle_name: editForm.middle_name.trim() || undefined,
+        address: editForm.address.trim(),
+        phone: editForm.phone.trim(),
+        gender: editForm.gender,
+        civil_status: editForm.civil_status,
+        date_of_birth: editForm.date_of_birth,
+      });
+      setProfile(result.profile);
+      setEditing(false);
+
+      // Update localStorage so header/sidebar show the new name
+      const savedUser = getSavedUser();
+      if (savedUser) {
+        savedUser.name = `${result.profile.first_name} ${result.profile.last_name}`;
+        localStorage.setItem("smartmart_user", JSON.stringify(savedUser));
+      }
+
+      setProfileMsg({ type: "success", text: "Profile updated successfully!" });
+      toast.success("Profile updated successfully!");
+    } catch (err: any) {
+      setProfileMsg({ type: "error", text: err.message || "Failed to update profile." });
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handleUpdatePassword = async () => {
     setErrorMsg("");
@@ -3307,18 +3403,42 @@ function CustomerProfile() {
     </div>
   );
 
+  const displayName = profile ? `${profile.first_name} ${profile.last_name}` : (user?.name || "Customer Account");
+  const joined = profile?.joined || user?.joined || "Member";
+
+  if (loading) {
+    return (
+      <div className="p-6 flex items-center justify-center min-h-[300px]">
+        <div className="text-center">
+          <div className="w-8 h-8 border-3 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+          <p className="text-sm text-muted-foreground font-medium">Loading profile...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 space-y-5">
       <h1 className="text-2xl font-extrabold text-foreground">My Profile</h1>
+
+      {/* Profile Message */}
+      {profileMsg && (
+        <div className={`p-3.5 rounded-xl text-xs font-semibold flex items-center gap-2 ${
+          profileMsg.type === "success" ? "bg-emerald-50 border border-emerald-200 text-emerald-700" : "bg-red-50 border border-red-200 text-red-700"
+        }`}>
+          {profileMsg.type === "success" ? <CheckCircle size={15} className="shrink-0" /> : <AlertTriangle size={15} className="shrink-0" />}
+          {profileMsg.text}
+        </div>
+      )}
 
       {/* Customer Header Card */}
       <div className="bg-card rounded-2xl border border-border p-6 shadow-sm">
         <div className="flex items-center gap-5 mb-6">
           <div className="w-16 h-16 rounded-2xl bg-emerald-100 flex items-center justify-center shrink-0">
-            <span className="text-emerald-700 font-extrabold text-3xl">{name.charAt(0)}</span>
+            <span className="text-emerald-700 font-extrabold text-3xl">{displayName.charAt(0)}</span>
           </div>
-          <div>
-            <h2 className="text-xl font-extrabold text-foreground">{name}</h2>
+          <div className="flex-1">
+            <h2 className="text-xl font-extrabold text-foreground">{displayName}</h2>
             <p className="text-sm text-muted-foreground">@{username}</p>
             <span className="inline-block mt-1 text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
               Active Member
@@ -3335,7 +3455,192 @@ function CustomerProfile() {
             <p className="text-xs text-muted-foreground font-medium">Member Since</p>
             <p className="font-semibold text-foreground text-sm mt-0.5">{joined}</p>
           </div>
+          {profile?.customer_code && (
+            <div className="p-3.5 bg-background rounded-xl border border-border col-span-2">
+              <p className="text-xs text-muted-foreground font-medium">Customer Code</p>
+              <p className="font-semibold text-foreground text-sm mt-0.5 font-mono">{profile.customer_code}</p>
+            </div>
+          )}
         </div>
+      </div>
+
+      {/* Personal Information Card */}
+      <div className="bg-card rounded-2xl border border-border p-6 shadow-sm">
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-2">
+            <User size={18} className="text-purple-600" />
+            <h3 className="font-extrabold text-foreground text-base">Personal Information</h3>
+          </div>
+          {!editing && (
+            <button
+              onClick={startEditing}
+              className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl border-2 border-purple-500 bg-purple-500 text-white hover:bg-purple-600 hover:border-purple-600 transition-all shadow-sm"
+            >
+              <Pencil size={14} />
+              Edit Profile
+            </button>
+          )}
+        </div>
+
+        {editing ? (
+          /* ── Edit Mode ── */
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-foreground mb-1.5">First Name <span className="text-red-500">*</span></label>
+                <input
+                  type="text"
+                  value={editForm.first_name}
+                  onChange={e => setEditForm(f => ({ ...f, first_name: e.target.value }))}
+                  className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                  placeholder="First name"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-foreground mb-1.5">Last Name <span className="text-red-500">*</span></label>
+                <input
+                  type="text"
+                  value={editForm.last_name}
+                  onChange={e => setEditForm(f => ({ ...f, last_name: e.target.value }))}
+                  className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                  placeholder="Last name"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-foreground mb-1.5">Middle Name</label>
+                <input
+                  type="text"
+                  value={editForm.middle_name}
+                  onChange={e => setEditForm(f => ({ ...f, middle_name: e.target.value }))}
+                  className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                  placeholder="Middle name (optional)"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-foreground mb-1.5">Address <span className="text-red-500">*</span></label>
+              <input
+                type="text"
+                value={editForm.address}
+                onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))}
+                className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                placeholder="Full address"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-foreground mb-1.5">Phone <span className="text-red-500">*</span></label>
+                <input
+                  type="text"
+                  value={editForm.phone}
+                  onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))}
+                  className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                  placeholder="Phone number"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-foreground mb-1.5">Date of Birth <span className="text-red-500">*</span></label>
+                <input
+                  type="date"
+                  value={editForm.date_of_birth}
+                  onChange={e => setEditForm(f => ({ ...f, date_of_birth: e.target.value }))}
+                  className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-foreground mb-1.5">Gender <span className="text-red-500">*</span></label>
+                <select
+                  value={editForm.gender}
+                  onChange={e => setEditForm(f => ({ ...f, gender: e.target.value }))}
+                  className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                >
+                  <option value="">Select gender</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                  <option value="Prefer not to say">Prefer not to say</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-foreground mb-1.5">Civil Status <span className="text-red-500">*</span></label>
+                <select
+                  value={editForm.civil_status}
+                  onChange={e => setEditForm(f => ({ ...f, civil_status: e.target.value }))}
+                  className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                >
+                  <option value="">Select status</option>
+                  <option value="Single">Single</option>
+                  <option value="Married">Married</option>
+                  <option value="Widowed">Widowed</option>
+                  <option value="Separated">Separated</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Save / Cancel buttons */}
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={cancelEditing}
+                className="flex-1 py-2.5 rounded-xl border border-border text-sm font-semibold hover:bg-muted transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveProfile}
+                disabled={saving}
+                className="flex-1 py-2.5 rounded-xl bg-purple-600 text-white text-sm font-bold hover:bg-purple-700 transition-colors shadow-sm disabled:opacity-50"
+              >
+                {saving ? "Saving..." : "Save Changes"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          /* ── View Mode ── */
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="p-3.5 bg-background rounded-xl border border-border">
+                <p className="text-xs text-muted-foreground font-medium">First Name</p>
+                <p className="font-semibold text-foreground text-sm mt-0.5">{profile?.first_name || "—"}</p>
+              </div>
+              <div className="p-3.5 bg-background rounded-xl border border-border">
+                <p className="text-xs text-muted-foreground font-medium">Last Name</p>
+                <p className="font-semibold text-foreground text-sm mt-0.5">{profile?.last_name || "—"}</p>
+              </div>
+              <div className="p-3.5 bg-background rounded-xl border border-border">
+                <p className="text-xs text-muted-foreground font-medium">Middle Name</p>
+                <p className="font-semibold text-foreground text-sm mt-0.5">{profile?.middle_name || "—"}</p>
+              </div>
+            </div>
+            <div className="p-3.5 bg-background rounded-xl border border-border">
+              <p className="text-xs text-muted-foreground font-medium">Address</p>
+              <p className="font-semibold text-foreground text-sm mt-0.5">{profile?.address || "—"}</p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="p-3.5 bg-background rounded-xl border border-border">
+                <p className="text-xs text-muted-foreground font-medium">Phone</p>
+                <p className="font-semibold text-foreground text-sm mt-0.5" style={{ fontFamily: "'DM Mono', monospace" }}>{profile?.phone || "—"}</p>
+              </div>
+              <div className="p-3.5 bg-background rounded-xl border border-border">
+                <p className="text-xs text-muted-foreground font-medium">Date of Birth</p>
+                <p className="font-semibold text-foreground text-sm mt-0.5">{profile?.date_of_birth || "—"}</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="p-3.5 bg-background rounded-xl border border-border">
+                <p className="text-xs text-muted-foreground font-medium">Gender</p>
+                <p className="font-semibold text-foreground text-sm mt-0.5">{profile?.gender || "—"}</p>
+              </div>
+              <div className="p-3.5 bg-background rounded-xl border border-border">
+                <p className="text-xs text-muted-foreground font-medium">Civil Status</p>
+                <p className="font-semibold text-foreground text-sm mt-0.5">{profile?.civil_status || "—"}</p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Change Password Card */}

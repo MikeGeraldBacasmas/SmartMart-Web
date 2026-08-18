@@ -141,6 +141,21 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   return resData as T;
 }
 
+export interface CustomerProfileData {
+  id: number;
+  customer_code: string;
+  first_name: string;
+  last_name: string;
+  middle_name?: string;
+  address: string;
+  phone: string;
+  gender: string;
+  civil_status: string;
+  date_of_birth: string;
+  joined: string;
+  username: string;
+}
+
 export const api = {
   // Auth
   auth: {
@@ -199,6 +214,21 @@ export const api = {
   customers: {
     getRegistered: (): Promise<RegisteredCustomer[]> => request<RegisteredCustomer[]>("/customers"),
     getPending: (): Promise<PendingCustomer[]> => request<PendingCustomer[]>("/customers/pending"),
+    getMyProfile: (): Promise<CustomerProfileData> => request<CustomerProfileData>("/customers/my-profile"),
+    updateMyProfile: (data: {
+      first_name: string;
+      last_name: string;
+      middle_name?: string;
+      address: string;
+      phone: string;
+      gender: string;
+      civil_status: string;
+      date_of_birth: string;
+    }): Promise<{ message: string; profile: CustomerProfileData }> =>
+      request("/customers/my-profile", {
+        method: "PUT",
+        body: JSON.stringify(data),
+      }),
     register: (data: {
       last_name: string;
       first_name: string;
