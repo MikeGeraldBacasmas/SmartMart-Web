@@ -7,8 +7,14 @@ import {
   LogOut, Search, Plus, Minus, Trash2, Bell, AlertTriangle,
   TrendingUp, CheckCircle, X, User, ClipboardList, Store,
   Receipt, Settings, Printer, ChevronRight, ShieldCheck, Pencil,
-  Eye, EyeOff, Filter,
+  Eye, EyeOff, Filter, Upload, Image as ImageIcon, Camera,
 } from "lucide-react";
+
+export const getProductImageUrl = (url?: string | null) => {
+  if (!url) return null;
+  if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:")) return url;
+  return `http://localhost:4000${url}`;
+};
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -21,9 +27,11 @@ interface Product {
   id: number;
   name: string;
   category: string;
+  category_id?: number;
   price: number;
   stock: number;
   lowStock: boolean;
+  image_url?: string | null;
 }
 
 interface CartItem {
@@ -872,9 +880,11 @@ function StoreProvider({ children }: { children: React.ReactNode }) {
           id: p.id,
           name: p.name,
           category: p.category,
+          category_id: p.category_id,
           price: Number(p.price),
           stock: p.stock,
           lowStock: p.stock <= (p.low_stock_threshold || 10),
+          image_url: p.image_url || null,
         })));
       }
       if (settingsRes.status === "fulfilled" && Object.keys(settingsRes.value).length > 0) {
@@ -1607,23 +1617,125 @@ function AdminDashboard({ products, categories = CATEGORIES }: { products: Produ
 // ─── Products Page ────────────────────────────────────────────────────────────
 
 function ProductsPage({ products, categories = CATEGORIES, onAddProduct }: { products: Product[]; categories?: string[]; onAddProduct: (p: Omit<Product, "id" | "lowStock">) => void }) {
+  const { refreshData } = useStore();
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All");
+
+  // Add Product State
   const [showAdd, setShowAdd] = useState(false);
   const [newName, setNewName] = useState("");
   const [newPrice, setNewPrice] = useState("");
   const [newStock, setNewStock] = useState("");
   const [newCat, setNewCat] = useState(categories[0]);
+  const [addImageFile, setAddImageFile] = useState<File | null>(null);
+  const [addImagePreview, setAddImagePreview] = useState<string | null>(null);
+  const [isAdding, setIsAdding] = useState(false);
+
+  // Edit Product State
+  const [editProduct, setEditProduct] = useState<Product | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editPrice, setEditPrice] = useState("");
+  const [editStock, setEditStock] = useState("");
+  const [editCat, setEditCat] = useState(categories[0]);
+  const [editImageFile, setEditImageFile] = useState<File | null>(null);
+  const [editImagePreview, setEditImagePreview] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
   const [productMsg, setProductMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  const handleSubmit = () => {
+  const handleOpenEdit = (p: Product) => {
+    setEditProduct(p);
+    setEditName(p.name);
+    setEditPrice(String(p.price));
+    setEditStock(String(p.stock));
+    setEditCat(p.category);
+    setEditImageFile(null);
+    setEditImagePreview(p.image_url ? getProductImageUrl(p.image_url) : null);
+  };
+
+  const handleAddImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setAddImageFile(file);
+      const url = URL.createObjectURL(file);
+      setAddImagePreview(url);
+    }
+  };
+
+  const handleEditImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setEditImageFile(file);
+      const url = URL.createObjectURL(file);
+      setEditImagePreview(url);
+    }
+  };
+
+  const handleSubmitAdd = async () => {
     if (!newName.trim() || !newPrice || !newStock) return;
     const name = newName.trim();
-    onAddProduct({ name, category: newCat, price: parseFloat(newPrice), stock: parseInt(newStock) });
-    setProductMsg({ type: "success", text: `Product "${name}" added successfully!` });
-    setTimeout(() => setProductMsg(null), 5000);
-    setNewName(""); setNewPrice(""); setNewStock(""); setNewCat(categories[0]);
-    setShowAdd(false);
+    setIsAdding(true);
+    try {
+      const cats = await api.categories.getAll();
+      const catObj = cats.find(c => c.name.toLowerCase() === newCat.toLowerCase());
+      const catId = catObj ? catObj.id : 1;
+
+      const created = await api.products.create({
+        name,
+        category_id: catId,
+        price: parseFloat(newPrice),
+        stock: parseInt(newStock),
+      });
+
+      const newId = (created as any)?.product_id || (created as any)?.id;
+      if (addImageFile && newId) {
+        await api.products.uploadImage(newId, addImageFile);
+      }
+
+      setProductMsg({ type: "success", text: `Product "${name}" added successfully!` });
+      setTimeout(() => setProductMsg(null), 5000);
+      setNewName(""); setNewPrice(""); setNewStock(""); setNewCat(categories[0]);
+      setAddImageFile(null); setAddImagePreview(null);
+      setShowAdd(false);
+      await refreshData();
+    } catch (err: any) {
+      setProductMsg({ type: "error", text: err.message || "Failed to create product" });
+      setTimeout(() => setProductMsg(null), 5000);
+    } finally {
+      setIsAdding(false);
+    }
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editProduct || !editName.trim() || !editPrice || !editStock) return;
+    setIsSaving(true);
+    try {
+      const cats = await api.categories.getAll();
+      const catObj = cats.find(c => c.name.toLowerCase() === editCat.toLowerCase());
+      const catId = catObj ? catObj.id : (editProduct.category_id || 1);
+
+      await api.products.update(editProduct.id, {
+        name: editName.trim(),
+        category_id: catId,
+        price: parseFloat(editPrice),
+        stock: parseInt(editStock),
+        image_url: editProduct.image_url || null,
+      });
+
+      if (editImageFile) {
+        await api.products.uploadImage(editProduct.id, editImageFile);
+      }
+
+      setProductMsg({ type: "success", text: `Product "${editName.trim()}" updated successfully!` });
+      setTimeout(() => setProductMsg(null), 5000);
+      setEditProduct(null);
+      await refreshData();
+    } catch (err: any) {
+      setProductMsg({ type: "error", text: err.message || "Failed to update product" });
+      setTimeout(() => setProductMsg(null), 5000);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const filtered = useMemo(() =>
@@ -1640,7 +1752,7 @@ function ProductsPage({ products, categories = CATEGORIES, onAddProduct }: { pro
           <h1 className="text-2xl font-extrabold text-foreground">Products</h1>
           <p className="text-muted-foreground text-sm">{products.length} total products</p>
         </div>
-        <button onClick={() => setShowAdd(true)} className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 transition-colors">
+        <button onClick={() => setShowAdd(true)} className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 transition-colors shadow-sm">
           <Plus size={16} /> Add Product
         </button>
       </div>
@@ -1663,25 +1775,44 @@ function ProductsPage({ products, categories = CATEGORIES, onAddProduct }: { pro
         </select>
       </div>
 
-      <div className="bg-card rounded-2xl border border-border overflow-hidden">
+      <div className="bg-card rounded-2xl border border-border overflow-hidden shadow-sm">
         <table className="w-full">
           <thead>
             <tr className="border-b border-border bg-muted/40">
-              {["Product", "Category", "Price", "Stock", "Status"].map(h => (
-                <th key={h} className={`text-xs font-semibold text-muted-foreground uppercase tracking-wider ${h === "Price" ? "px-4 py-3 text-right" : h === "Stock" ? "px-4 py-3 text-center" : "px-4 py-3 text-left"}`}>{h}</th>
+              {["Product", "Category", "Price", "Stock", "Status", "Actions"].map(h => (
+                <th key={h} className={`text-xs font-semibold text-muted-foreground uppercase tracking-wider ${h === "Price" ? "px-4 py-3 text-right" : h === "Stock" ? "px-4 py-3 text-center" : h === "Actions" ? "px-4 py-3 text-center" : "px-4 py-3 text-left"}`}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {filtered.map(p => (
               <tr key={p.id} className="hover:bg-muted/20 transition-colors">
-                <td className="px-4 py-3 text-sm font-semibold text-foreground">{p.name}</td>
+                <td className="px-4 py-3 text-sm font-semibold text-foreground">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-xl overflow-hidden shrink-0 flex items-center justify-center border border-border/50 ${CAT_BG[p.category] ?? "bg-gray-100"}`}>
+                      {p.image_url ? (
+                        <img src={getProductImageUrl(p.image_url) || ""} alt={p.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <Package size={18} className="text-slate-400" />
+                      )}
+                    </div>
+                    <span className="font-semibold text-[#1f2937] truncate max-w-[240px]">{p.name}</span>
+                  </div>
+                </td>
                 <td className="px-4 py-3">
                   <span className={`px-2 py-0.5 rounded-md text-xs font-semibold ${CAT_COLORS[p.category] ?? "bg-gray-100 text-gray-700"}`}>{p.category}</span>
                 </td>
                 <td className="px-4 py-3 text-right text-sm font-bold text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{peso(p.price)}</td>
                 <td className={`px-4 py-3 text-center text-sm font-bold ${p.lowStock ? "text-red-500" : "text-foreground"}`} style={{ fontFamily: "'DM Mono', monospace" }}>{p.stock}</td>
                 <td className="px-4 py-3 text-left">{p.lowStock ? <Badge variant="danger">Low Stock</Badge> : <Badge variant="success">In Stock</Badge>}</td>
+                <td className="px-4 py-3 text-center">
+                  <button
+                    onClick={() => handleOpenEdit(p)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-all shadow-sm active:scale-95"
+                  >
+                    <Pencil size={13} /> Edit
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -1694,25 +1825,162 @@ function ProductsPage({ products, categories = CATEGORIES, onAddProduct }: { pro
         )}
       </div>
 
-      {showAdd && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-card rounded-2xl border border-border p-6 w-full max-w-md shadow-2xl">
+      {/* Edit Product Modal */}
+      {editProduct && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-card rounded-2xl border border-border p-6 w-full max-w-lg shadow-2xl animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
-              <h3 className="font-extrabold text-lg text-foreground">Add New Product</h3>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                  <Pencil size={16} />
+                </div>
+                <h3 className="font-extrabold text-lg text-foreground">Edit Product</h3>
+              </div>
+              <button onClick={() => setEditProduct(null)} className="p-1.5 hover:bg-muted rounded-lg transition-colors"><X size={18} /></button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Product Image Section */}
+              <div>
+                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Product Image</label>
+                <div className="flex items-center gap-4 p-3.5 rounded-xl border border-border bg-background">
+                  <div className={`w-20 h-20 rounded-xl overflow-hidden shrink-0 flex items-center justify-center border border-border relative bg-muted/30`}>
+                    {editImagePreview ? (
+                      <img src={editImagePreview} alt="Preview" className="w-full h-full object-cover" />
+                    ) : (
+                      <Package size={30} className="text-slate-300" />
+                    )}
+                  </div>
+                  <div className="flex-1 space-y-1.5">
+                    <p className="text-xs font-semibold text-foreground">
+                      {editImageFile ? editImageFile.name : editProduct.image_url ? "Current image uploaded" : "No image uploaded yet"}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      PNG, JPG, WEBP up to 5MB. Visible to Cashiers and Customers.
+                    </p>
+                    <div className="flex gap-2 pt-1">
+                      <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 transition-colors shadow-xs">
+                        <Upload size={13} /> {editProduct.image_url || editImageFile ? "Change Image" : "Upload Image"}
+                        <input type="file" accept="image/*" onChange={handleEditImageChange} className="hidden" />
+                      </label>
+                      {editImageFile && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditImageFile(null);
+                            setEditImagePreview(editProduct.image_url ? getProductImageUrl(editProduct.image_url) : null);
+                          }}
+                          className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-muted-foreground hover:bg-muted transition-colors"
+                        >
+                          Cancel File
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-foreground mb-1.5">Product Name</label>
+                <input type="text" value={editName} onChange={e => setEditName(e.target.value)} placeholder="e.g. Piattos Cheese 85g" className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-semibold text-foreground mb-1.5">Price (₱)</label>
+                  <input type="number" step="0.01" value={editPrice} onChange={e => setEditPrice(e.target.value)} placeholder="0.00" min="0" className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-foreground mb-1.5">Stock Quantity</label>
+                  <input type="number" value={editStock} onChange={e => setEditStock(e.target.value)} placeholder="0" min="0" className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-foreground mb-1.5">Category</label>
+                <select value={editCat} onChange={e => setEditCat(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30">
+                  {categories.map(c => <option key={c}>{c}</option>)}
+                </select>
+              </div>
+
+              <div className="flex gap-3 pt-3 border-t border-border">
+                <button type="button" onClick={() => setEditProduct(null)} className="flex-1 py-2.5 rounded-xl border border-border text-sm font-semibold hover:bg-muted transition-colors">Cancel</button>
+                <button type="button" onClick={handleSaveEdit} disabled={isSaving} className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition-colors shadow-sm disabled:opacity-50">
+                  {isSaving ? "Saving Changes..." : "Save Changes"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Product Modal */}
+      {showAdd && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-card rounded-2xl border border-border p-6 w-full max-w-lg shadow-2xl animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                  <Plus size={16} />
+                </div>
+                <h3 className="font-extrabold text-lg text-foreground">Add New Product</h3>
+              </div>
               <button onClick={() => setShowAdd(false)} className="p-1.5 hover:bg-muted rounded-lg transition-colors"><X size={18} /></button>
             </div>
             <div className="space-y-4">
+              {/* Optional Image Upload */}
+              <div>
+                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Product Image (Optional)</label>
+                <div className="flex items-center gap-4 p-3.5 rounded-xl border border-border bg-background">
+                  <div className="w-20 h-20 rounded-xl overflow-hidden shrink-0 flex items-center justify-center border border-border bg-muted/30">
+                    {addImagePreview ? (
+                      <img src={addImagePreview} alt="Preview" className="w-full h-full object-cover" />
+                    ) : (
+                      <Package size={30} className="text-slate-300" />
+                    )}
+                  </div>
+                  <div className="flex-1 space-y-1.5">
+                    <p className="text-xs font-semibold text-foreground">
+                      {addImageFile ? addImageFile.name : "No image selected"}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      PNG, JPG, WEBP up to 5MB.
+                    </p>
+                    <div className="flex gap-2 pt-1">
+                      <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 transition-colors shadow-xs">
+                        <Upload size={13} /> {addImageFile ? "Change Image" : "Upload Image"}
+                        <input type="file" accept="image/*" onChange={handleAddImageChange} className="hidden" />
+                      </label>
+                      {addImageFile && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAddImageFile(null);
+                            setAddImagePreview(null);
+                          }}
+                          className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-muted-foreground hover:bg-muted transition-colors"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-sm font-semibold text-foreground mb-1.5">Product Name</label>
                 <input type="text" value={newName} onChange={e => setNewName(e.target.value)} placeholder="e.g. Piattos Cheese 85g" className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
               </div>
-              <div>
-                <label className="block text-sm font-semibold text-foreground mb-1.5">Price (₱)</label>
-                <input type="number" value={newPrice} onChange={e => setNewPrice(e.target.value)} placeholder="0.00" min="0" className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-foreground mb-1.5">Stock Quantity</label>
-                <input type="number" value={newStock} onChange={e => setNewStock(e.target.value)} placeholder="0" min="0" className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-semibold text-foreground mb-1.5">Price (₱)</label>
+                  <input type="number" step="0.01" value={newPrice} onChange={e => setNewPrice(e.target.value)} placeholder="0.00" min="0" className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-foreground mb-1.5">Stock Quantity</label>
+                  <input type="number" value={newStock} onChange={e => setNewStock(e.target.value)} placeholder="0" min="0" className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-semibold text-foreground mb-1.5">Category</label>
@@ -1720,9 +1988,11 @@ function ProductsPage({ products, categories = CATEGORIES, onAddProduct }: { pro
                   {categories.map(c => <option key={c}>{c}</option>)}
                 </select>
               </div>
-              <div className="flex gap-3 pt-1">
-                <button onClick={() => setShowAdd(false)} className="flex-1 py-2.5 rounded-xl border border-border text-sm font-semibold hover:bg-muted transition-colors">Cancel</button>
-                <button onClick={handleSubmit} className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition-colors">Add Product</button>
+              <div className="flex gap-3 pt-3 border-t border-border">
+                <button type="button" onClick={() => setShowAdd(false)} className="flex-1 py-2.5 rounded-xl border border-border text-sm font-semibold hover:bg-muted transition-colors">Cancel</button>
+                <button type="button" onClick={handleSubmitAdd} disabled={isAdding} className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition-colors shadow-sm disabled:opacity-50">
+                  {isAdding ? "Adding Product..." : "Add Product"}
+                </button>
               </div>
             </div>
           </div>
@@ -2689,8 +2959,12 @@ function POSPage({ products, categories = CATEGORIES }: { products: Product[]; c
                   {inCart && (
                     <span className="absolute top-2 right-2 w-5 h-5 bg-emerald-500 text-white text-xs font-extrabold rounded-full flex items-center justify-center">{inCart.qty}</span>
                   )}
-                  <div className={`w-10 h-10 rounded-xl mb-2.5 flex items-center justify-center ${CAT_BG[product.category] ?? "bg-gray-50"}`}>
-                    <Package size={18} className="text-slate-400" />
+                  <div className={`w-full aspect-square rounded-xl mb-2.5 overflow-hidden flex items-center justify-center ${CAT_BG[product.category] ?? "bg-gray-50"}`}>
+                    {product.image_url ? (
+                      <img src={getProductImageUrl(product.image_url) || ""} alt={product.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <Package size={22} className="text-slate-400" />
+                    )}
                   </div>
                   <p className="text-xs font-bold text-foreground leading-tight line-clamp-2">{product.name}</p>
                   <p className="text-sm font-extrabold text-emerald-600 mt-1" style={{ fontFamily: "'DM Mono', monospace" }}>{peso(product.price)}</p>
@@ -2724,7 +2998,14 @@ function POSPage({ products, categories = CATEGORIES }: { products: Product[]; c
             </div>
           ) : (
             cart.map(item => (
-              <div key={item.product.id} className="flex items-center gap-2 p-3 bg-background rounded-xl">
+              <div key={item.product.id} className="flex items-center gap-2.5 p-2.5 bg-background rounded-xl">
+                <div className={`w-9 h-9 rounded-lg overflow-hidden shrink-0 flex items-center justify-center border border-border/40 ${CAT_BG[item.product.category] ?? "bg-gray-100"}`}>
+                  {item.product.image_url ? (
+                    <img src={getProductImageUrl(item.product.image_url) || ""} alt={item.product.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <Package size={15} className="text-slate-400" />
+                  )}
+                </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-semibold text-foreground truncate">{item.product.name}</p>
                   <p className="text-xs text-muted-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{peso(item.product.price)} each</p>
@@ -3081,8 +3362,12 @@ function CustomerBrowse({ products, categories = CATEGORIES }: { products: Produ
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
         {filtered.map(p => (
           <button key={p.id} onClick={() => setSelected(p)} className="bg-card rounded-2xl border border-border p-4 text-left hover:shadow-md hover:border-emerald-300 transition-all group">
-            <div className={`w-full aspect-square rounded-xl mb-3 flex items-center justify-center ${CAT_BG[p.category] ?? "bg-gray-50"}`}>
-              <Package size={28} className="text-slate-400 group-hover:text-slate-500 transition-colors" />
+            <div className={`w-full aspect-square rounded-xl mb-3 overflow-hidden flex items-center justify-center ${CAT_BG[p.category] ?? "bg-gray-50"}`}>
+              {p.image_url ? (
+                <img src={getProductImageUrl(p.image_url) || ""} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+              ) : (
+                <Package size={28} className="text-slate-400 group-hover:text-slate-500 transition-colors" />
+              )}
             </div>
             <p className="text-xs font-bold text-foreground leading-tight line-clamp-2">{p.name}</p>
             <p className="text-base font-extrabold text-emerald-600 mt-1" style={{ fontFamily: "'DM Mono', monospace" }}>{peso(p.price)}</p>
@@ -3101,8 +3386,12 @@ function CustomerBrowse({ products, categories = CATEGORIES }: { products: Produ
               <h3 className="font-extrabold text-foreground text-base">{selected.name}</h3>
               <button onClick={() => setSelected(null)} className="p-1.5 hover:bg-muted rounded-lg transition-colors"><X size={18} /></button>
             </div>
-            <div className={`w-full h-40 rounded-2xl mb-5 flex items-center justify-center ${CAT_BG[selected.category] ?? "bg-gray-50"}`}>
-              <Package size={60} className="text-slate-300" />
+            <div className={`w-full h-48 rounded-2xl mb-5 overflow-hidden flex items-center justify-center ${CAT_BG[selected.category] ?? "bg-gray-50"}`}>
+              {selected.image_url ? (
+                <img src={getProductImageUrl(selected.image_url) || ""} alt={selected.name} className="w-full h-full object-contain" />
+              ) : (
+                <Package size={60} className="text-slate-300" />
+              )}
             </div>
             <div className="space-y-3 text-sm">
               <div className="flex justify-between items-center">

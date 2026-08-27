@@ -30,6 +30,7 @@ export interface ProductItem {
   low_stock_threshold?: number;
   low_stock?: number | boolean;
   is_active?: number;
+  image_url?: string | null;
 }
 
 export interface StaffItem {
@@ -204,10 +205,30 @@ export const api = {
         body: JSON.stringify(data),
       }),
     updateStock: (id: number, stock: number): Promise<{ message: string }> =>
-      request(`/${id}/stock`, {
+      request(`/products/${id}/stock`, {
         method: "PATCH",
         body: JSON.stringify({ stock }),
       }),
+    update: (id: number, data: { name: string; category_id: number; price: number; stock: number; image_url?: string | null }): Promise<{ message: string }> =>
+      request(`/products/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(data),
+      }),
+    uploadImage: async (id: number, file: File): Promise<{ image_url: string }> => {
+      const token = getToken();
+      const formData = new FormData();
+      formData.append("image", file);
+      const res = await fetch(`${API_BASE}/products/${id}/image`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(err.error || "Upload failed");
+      }
+      return res.json();
+    },
   },
 
   // Customers
