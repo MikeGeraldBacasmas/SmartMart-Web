@@ -1,3 +1,4 @@
+/// <reference path="../vite-env.d.ts" />
 import { useState, useMemo, useCallback, createContext, useContext, useEffect } from "react";
 import { Toaster, toast } from "sonner";
 import { api, getSavedUser, UserPayload, RegisteredCustomer, CustomerProfileData, DashboardSummary, TransactionItem, StaffItem } from "../api";
