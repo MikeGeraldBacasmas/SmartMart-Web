@@ -8,7 +8,7 @@ import {
   LogOut, Search, Plus, Minus, Trash2, Bell, AlertTriangle,
   TrendingUp, CheckCircle, X, User, ClipboardList, Store,
   Receipt, Settings, Printer, ChevronRight, ShieldCheck, Pencil,
-  Eye, EyeOff, Filter, Upload, Image as ImageIcon, Camera,
+  Eye, EyeOff, Filter, Upload, Image as ImageIcon, Camera, Download,
 } from "lucide-react";
 
 export const getProductImageUrl = (url?: string | null) => {
@@ -117,41 +117,148 @@ const CAT_BG: Record<string, string> = {
 
 interface ChartPoint { label: string; value: number; }
 
-function SimpleBarChart({ data, height = 200, color = "#10b981", formatY }: {
-  data: ChartPoint[]; height?: number; color?: string; formatY?: (v: number) => string;
+function getNiceScale(maxVal: number): { topVal: number; ticks: number[] } {
+  if (maxVal <= 0) return { topVal: 1000, ticks: [0, 250, 500, 750, 1000] };
+  if (maxVal <= 1000) return { topVal: 1000, ticks: [0, 250, 500, 750, 1000] };
+  const pow10 = Math.pow(10, Math.floor(Math.log10(maxVal)));
+  const norm = maxVal / pow10;
+  let niceNorm = 10;
+  if (norm <= 1.25) niceNorm = 1.25;
+  else if (norm <= 2) niceNorm = 2;
+  else if (norm <= 2.5) niceNorm = 2.5;
+  else if (norm <= 5) niceNorm = 5;
+  else niceNorm = 10;
+  const topVal = Math.round(niceNorm * pow10);
+  const step = topVal / 4;
+  return { topVal, ticks: [0, step, step * 2, step * 3, topVal] };
+}
+
+function SimpleBarChart({ data, height = 200, color = "#10b981", formatY, customTicks, maxY }: {
+  data: ChartPoint[];
+  height?: number;
+  color?: string;
+  formatY?: (v: number) => string;
+  customTicks?: number[];
+  maxY?: number;
 }) {
   const safeData = data && data.length > 0 ? data : [{ label: "N/A", value: 0 }];
-  const max = Math.max(1, ...safeData.map(d => d.value));
-  const fmt = formatY ?? (v => `₱${v >= 1000 ? (v / 1000).toFixed(0) + "K" : v}`);
+  const dataMax = Math.max(0, ...safeData.map(d => d.value));
+
+  let topVal: number;
+  let ticks: number[];
+
+  if (customTicks && customTicks.length > 0) {
+    const customMax = customTicks[customTicks.length - 1];
+    if (dataMax <= customMax && !maxY) {
+      topVal = customMax;
+      ticks = customTicks;
+    } else {
+      const scale = getNiceScale(Math.max(dataMax, maxY ?? customMax));
+      topVal = scale.topVal;
+      ticks = scale.ticks;
+    }
+  } else if (maxY) {
+    topVal = maxY;
+    const step = topVal / 4;
+    ticks = [0, step, step * 2, step * 3, topVal];
+  } else {
+    const scale = getNiceScale(dataMax);
+    topVal = scale.topVal;
+    ticks = scale.ticks;
+  }
+
+  const defaultFmt = (v: number) => {
+    if (v === 0) return "₱0";
+    if (v >= 1000000) return `₱${(v / 1000000).toFixed(1)}M`;
+    if (v >= 10000) return `₱${(v / 1000).toLocaleString()}K`;
+    return `₱${v.toLocaleString()}`;
+  };
+
+  const fmt = formatY ?? defaultFmt;
   const svgH = height;
-  const padT = 8; const padB = 28; const padL = 44; const padR = 8;
+  const padT = 12;
+  const padB = 28;
+  const padL = 52;
+  const padR = 12;
   const chartH = svgH - padT - padB;
-  const barW = Math.min(32, Math.floor((800 - padL - padR) / safeData.length - 6));
+  const chartW = 600 - padL - padR;
+
+  const slotW = chartW / safeData.length;
+  const barW = Math.min(32, Math.max(10, Math.floor(slotW * 0.58)));
 
   return (
     <div style={{ width: "100%", height: svgH }}>
-      <svg width="100%" height={svgH} viewBox={`0 0 ${600} ${svgH}`} preserveAspectRatio="none">
-        {/* Grid lines */}
-        {[0, 0.25, 0.5, 0.75, 1].map(f => {
-          const y = padT + chartH * (1 - f);
+      <svg width="100%" height={svgH} viewBox="0 0 600 200" preserveAspectRatio="none" className="overflow-visible">
+        {/* Grid lines & Y-axis labels */}
+        {ticks.map(tick => {
+          const y = padT + chartH * (1 - (topVal > 0 ? tick / topVal : 0));
           return (
-            <g key={`g-${f}`}>
-              <line x1={padL} x2={600 - padR} y1={y} y2={y} stroke="rgba(0,0,0,0.04)" strokeWidth={1} />
-              <text x={padL - 4} y={y + 4} textAnchor="end" fontSize={10} fill="#94a3b8">{fmt(max * f)}</text>
+            <g key={`g-${tick}`}>
+              <line x1={padL} x2={600 - padR} y1={y} y2={y} stroke="rgba(0,0,0,0.06)" strokeWidth={1} strokeDasharray="2 2" />
+              <text x={padL - 6} y={y + 3.5} textAnchor="end" fontSize={10} fill="#94a3b8" fontWeight="600" style={{ fontFamily: "'DM Mono', monospace" }}>
+                {fmt(tick)}
+              </text>
             </g>
           );
         })}
         {/* Bars */}
         {safeData.map((d, i) => {
-          const slotW = (600 - padL - padR) / safeData.length;
-          const x = padL + slotW * i + slotW / 2 - barW / 2;
-          const barH = (d.value / max) * chartH;
+          const x = padL + slotW * i + (slotW - barW) / 2;
+          const barH = topVal > 0 && d.value > 0 ? Math.max(3, (d.value / topVal) * chartH) : 0;
           const y = padT + chartH - barH;
           return (
-            <g key={`b-${i}`}>
-              <rect x={x} y={y} width={barW} height={barH} fill={color} rx={4} ry={4} opacity={0.85} />
-              <rect x={x} y={y} width={barW} height={Math.min(4, barH)} fill={color} rx={4} ry={4} />
-              <text x={x + barW / 2} y={svgH - 8} textAnchor="middle" fontSize={11} fill="#64748b">{d.label}</text>
+            <g key={`b-${i}`} className="group cursor-pointer">
+              <title>{`${d.label}: ₱${Number(d.value).toLocaleString()}`}</title>
+              {barH > 0 ? (
+                <>
+                  <rect
+                    x={x}
+                    y={y}
+                    width={barW}
+                    height={barH}
+                    fill={color}
+                    rx={4}
+                    ry={4}
+                    opacity={0.88}
+                    className="transition-all duration-200 hover:opacity-100"
+                  />
+                  <rect
+                    x={x}
+                    y={y}
+                    width={barW}
+                    height={Math.min(3, barH)}
+                    fill={color}
+                    rx={2}
+                    ry={2}
+                  />
+                </>
+              ) : (
+                <rect
+                  x={x}
+                  y={padT + chartH - 1.5}
+                  width={barW}
+                  height={1.5}
+                  fill="#e2e8f0"
+                  rx={1}
+                />
+              )}
+              {(() => {
+                const total = safeData.length;
+                const step = total <= 10 ? 1 : total <= 15 ? 2 : total <= 20 ? 3 : 5;
+                if (i % step !== 0 && i !== total - 1) return null;
+                return (
+                  <text
+                    x={padL + slotW * i + slotW / 2}
+                    y={svgH - 8}
+                    textAnchor="middle"
+                    fontSize={total > 15 ? 8.5 : total > 8 ? 9.5 : 11}
+                    fill="#64748b"
+                    fontWeight="600"
+                  >
+                    {d.label}
+                  </text>
+                );
+              })()}
             </g>
           );
         })}
@@ -160,53 +267,84 @@ function SimpleBarChart({ data, height = 200, color = "#10b981", formatY }: {
   );
 }
 
-function SimpleLineChart({ data, height = 200, color = "#10b981", formatY }: {
+function SimpleLineChart({ data, height = 240, color = "#10b981", formatY }: {
   data: ChartPoint[]; height?: number; color?: string; formatY?: (v: number) => string;
 }) {
-  const max = Math.max(...data.map(d => d.value));
-  const min = Math.min(...data.map(d => d.value));
-  const range = max - min || 1;
-  const fmt = formatY ?? (v => `₱${(v / 1000).toFixed(0)}K`);
+  const safeData = data && data.length > 0 ? data : [{ label: "N/A", value: 0 }];
+  const dataMax = Math.max(0, ...safeData.map(d => d.value));
+  const { topVal, ticks } = getNiceScale(dataMax);
+
+  const defaultFmt = (v: number) => {
+    if (v === 0) return "₱0";
+    if (v >= 1000000) return `₱${(v / 1000000).toFixed(1)}M`;
+    if (v >= 10000) return `₱${(v / 1000).toLocaleString()}K`;
+    return `₱${v.toLocaleString()}`;
+  };
+
+  const fmt = formatY ?? defaultFmt;
   const svgH = height;
-  const padT = 8; const padB = 28; const padL = 44; const padR = 16;
+  const padT = 16;
+  const padB = 28;
+  const padL = 52;
+  const padR = 20;
   const chartH = svgH - padT - padB;
   const chartW = 600 - padL - padR;
 
-  const px = (i: number) => padL + (i / (data.length - 1)) * chartW;
-  const py = (v: number) => padT + chartH - ((v - min) / range) * chartH;
+  const px = (i: number) => padL + (safeData.length > 1 ? (i / (safeData.length - 1)) * chartW : chartW / 2);
+  const py = (v: number) => padT + chartH * (1 - (topVal > 0 ? v / topVal : 0));
 
-  const pathD = data.map((d, i) => `${i === 0 ? "M" : "L"} ${px(i)} ${py(d.value)}`).join(" ");
-  const areaD = `${pathD} L ${px(data.length - 1)} ${padT + chartH} L ${px(0)} ${padT + chartH} Z`;
+  const pathD = safeData.map((d, i) => `${i === 0 ? "M" : "L"} ${px(i)} ${py(d.value)}`).join(" ");
+  const areaD = safeData.length > 1
+    ? `${pathD} L ${px(safeData.length - 1)} ${padT + chartH} L ${px(0)} ${padT + chartH} Z`
+    : "";
 
   return (
     <div style={{ width: "100%", height: svgH }}>
-      <svg width="100%" height={svgH} viewBox={`0 0 ${600} ${svgH}`} preserveAspectRatio="none">
+      <svg width="100%" height={svgH} viewBox="0 0 600 240" preserveAspectRatio="none" className="overflow-visible">
         <defs>
-          <linearGradient id="lg-area" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity={0.15} />
-            <stop offset="100%" stopColor={color} stopOpacity={0} />
+          <linearGradient id="lg-area-emerald" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity={0.25} />
+            <stop offset="100%" stopColor={color} stopOpacity={0.01} />
           </linearGradient>
         </defs>
-        {/* Grid */}
-        {[0, 0.25, 0.5, 0.75, 1].map(f => {
-          const v = min + range * f;
-          const y = py(v);
+        {/* Grid lines & Y-axis labels */}
+        {ticks.map(tick => {
+          const y = padT + chartH * (1 - (topVal > 0 ? tick / topVal : 0));
           return (
-            <g key={`g-${f}`}>
-              <line x1={padL} x2={600 - padR} y1={y} y2={y} stroke="rgba(0,0,0,0.04)" strokeWidth={1} />
-              <text x={padL - 4} y={y + 4} textAnchor="end" fontSize={10} fill="#94a3b8">{fmt(v)}</text>
+            <g key={`g-${tick}`}>
+              <line x1={padL} x2={600 - padR} y1={y} y2={y} stroke="rgba(0,0,0,0.06)" strokeWidth={1} strokeDasharray="2 2" />
+              <text x={padL - 6} y={y + 3.5} textAnchor="end" fontSize={10} fill="#94a3b8" fontWeight="600" style={{ fontFamily: "'DM Mono', monospace" }}>
+                {fmt(tick)}
+              </text>
             </g>
           );
         })}
         {/* Area fill */}
-        <path d={areaD} fill="url(#lg-area)" />
+        {areaD && <path d={areaD} fill="url(#lg-area-emerald)" />}
         {/* Line */}
         <path d={pathD} fill="none" stroke={color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
         {/* Dots + labels */}
-        {data.map((d, i) => (
-          <g key={`d-${i}`}>
-            <circle cx={px(i)} cy={py(d.value)} r={4} fill={color} />
-            <text x={px(i)} y={svgH - 8} textAnchor="middle" fontSize={11} fill="#64748b">{d.label}</text>
+        {safeData.map((d, i) => (
+          <g key={`d-${i}`} className="group cursor-pointer">
+            <title>{`${d.label}: ₱${Number(d.value).toLocaleString()}`}</title>
+            <circle cx={px(i)} cy={py(d.value)} r={4.5} fill="#ffffff" stroke={color} strokeWidth={2.5} className="transition-transform group-hover:scale-125" />
+            {(() => {
+              const total = safeData.length;
+              const step = total <= 10 ? 1 : total <= 15 ? 2 : total <= 20 ? 3 : 5;
+              if (i % step !== 0 && i !== total - 1) return null;
+              return (
+                <text
+                  x={px(i)}
+                  y={svgH - 8}
+                  textAnchor="middle"
+                  fontSize={total > 15 ? 8.5 : total > 8 ? 9.5 : 11}
+                  fill="#64748b"
+                  fontWeight="600"
+                >
+                  {d.label}
+                </text>
+              );
+            })()}
           </g>
         ))}
       </svg>
@@ -1432,32 +1570,87 @@ function AdminDashboard({ products, categories = CATEGORIES }: { products: Produ
   const today = new Date().toLocaleDateString("en-PH", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 
   const chartData = useMemo(() => {
-    if (transactions.length === 0) {
-      if (chartTab === "yearly") {
-        return [{ label: "Jan", value: 0 }, { label: "Feb", value: 0 }, { label: "Mar", value: 0 }];
-      }
-      return [
-        { label: "Mon", value: 0 }, { label: "Tue", value: 0 }, { label: "Wed", value: 0 },
-        { label: "Thu", value: 0 }, { label: "Fri", value: 0 }, { label: "Sat", value: 0 }, { label: "Sun", value: 0 }
-      ];
+    if (chartTab === "daily") {
+      // 12AM - 12PM / 24-hour cycle: 12AM, 2AM, 4AM, 6AM, 8AM, 10AM, 12PM, 2PM, 4PM, 6PM, 8PM, 10PM
+      const slots = ["12AM", "2AM", "4AM", "6AM", "8AM", "10AM", "12PM", "2PM", "4PM", "6PM", "8PM", "10PM"];
+      const map: Record<string, number> = Object.fromEntries(slots.map(s => [s, 0]));
+
+      const todayDate = new Date();
+      const todayYear = todayDate.getFullYear();
+      const todayMonth = todayDate.getMonth();
+      const todayDay = todayDate.getDate();
+
+      const todayTxs = transactions.filter(t => {
+        if (!t.date) return false;
+        const d = new Date(t.date);
+        return !isNaN(d.getTime()) && d.getFullYear() === todayYear && d.getMonth() === todayMonth && d.getDate() === todayDay;
+      });
+      const txsToUse = todayTxs.length > 0 ? todayTxs : transactions;
+
+      txsToUse.forEach(t => {
+        if (!t.date) return;
+        const dateObj = new Date(t.date);
+        if (isNaN(dateObj.getTime())) return;
+        const hour = dateObj.getHours(); // 0..23
+        const slotIdx = Math.min(slots.length - 1, Math.floor(hour / 2));
+        const slot = slots[slotIdx];
+        map[slot] = (map[slot] || 0) + Number(t.total_amount || 0);
+      });
+
+      return slots.map(label => ({ label, value: map[label] || 0 }));
     }
-    const map: Record<string, number> = {};
+
+    if (chartTab === "weekly") {
+      // Monday to Sunday in exact sequence
+      const slots = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+      const map: Record<string, number> = Object.fromEntries(slots.map(s => [s, 0]));
+
+      transactions.forEach(t => {
+        if (!t.date) return;
+        const dateObj = new Date(t.date);
+        if (isNaN(dateObj.getTime())) return;
+        const dayIdx = (dateObj.getDay() + 6) % 7; // 0=Mon, 1=Tue, ..., 6=Sun
+        const slot = slots[dayIdx];
+        map[slot] = (map[slot] || 0) + Number(t.total_amount || 0);
+      });
+
+      return slots.map(label => ({ label, value: map[label] || 0 }));
+    }
+
+    if (chartTab === "monthly") {
+      // January to December in exact sequence
+      const slots = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const map: Record<string, number> = Object.fromEntries(slots.map(s => [s, 0]));
+
+      transactions.forEach(t => {
+        if (!t.date) return;
+        const dateObj = new Date(t.date);
+        if (isNaN(dateObj.getTime())) return;
+        const m = dateObj.getMonth(); // 0..11
+        const slot = slots[m];
+        if (slot) {
+          map[slot] = (map[slot] || 0) + Number(t.total_amount || 0);
+        }
+      });
+
+      return slots.map(label => ({ label, value: map[label] || 0 }));
+    }
+
+    // Yearly: 2026 to 2030
+    const slots = ["2026", "2027", "2028", "2029", "2030"];
+    const map: Record<string, number> = Object.fromEntries(slots.map(s => [s, 0]));
+
     transactions.forEach(t => {
       if (!t.date) return;
       const dateObj = new Date(t.date);
-      let d = "";
-      if (chartTab === "daily") {
-        d = dateObj.toLocaleTimeString("en-US", { hour: "numeric", hour12: true });
-      } else if (chartTab === "monthly") {
-        d = dateObj.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-      } else if (chartTab === "yearly") {
-        d = dateObj.toLocaleDateString("en-US", { month: "short" });
-      } else { // weekly
-        d = dateObj.toLocaleDateString("en-US", { weekday: "short" });
+      if (isNaN(dateObj.getTime())) return;
+      const yr = String(dateObj.getFullYear());
+      if (yr in map) {
+        map[yr] = (map[yr] || 0) + Number(t.total_amount || 0);
       }
-      map[d] = (map[d] || 0) + Number(t.total_amount || 0);
     });
-    return Object.entries(map).map(([label, value]) => ({ label, value }));
+
+    return slots.map(label => ({ label, value: map[label] || 0 }));
   }, [transactions, chartTab]);
 
   const totalProductsCount = summary?.total_products ?? products.length;
@@ -1499,7 +1692,11 @@ function AdminDashboard({ products, categories = CATEGORIES }: { products: Produ
               ))}
             </div>
           </div>
-          <SimpleBarChart data={chartData} height={200} />
+          <SimpleBarChart
+            data={chartData}
+            height={200}
+            customTicks={chartTab === "daily" ? [0, 100, 200, 500, 1000] : undefined}
+          />
         </div>
 
         {/* Best Sellers */}
@@ -2006,9 +2203,17 @@ function ProductsPage({ products, categories = CATEGORIES, onAddProduct }: { pro
 // ─── Inventory Page ───────────────────────────────────────────────────────────
 
 function InventoryPage({ products, categories = CATEGORIES, catMeta = CAT_META }: { products: Product[]; categories?: string[]; catMeta?: CatMeta }) {
+  const { refreshData } = useStore();
   const [search, setSearch] = useState("");
   const [selectedCat, setSelectedCat] = useState("All");
   const [stockFilter, setStockFilter] = useState<"all" | "low">("all");
+
+  // Restock modal states
+  const [restockProduct, setRestockProduct] = useState<Product | null>(null);
+  const [restockAmount, setRestockAmount] = useState<string>("10");
+  const [restockMode, setRestockMode] = useState<"add" | "set">("add");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const lowCount = products.filter(p => p.lowStock).length;
 
@@ -2018,6 +2223,61 @@ function InventoryPage({ products, categories = CATEGORIES, catMeta = CAT_META }
     const mf = stockFilter === "all" || p.lowStock;
     return ms && mc && mf;
   });
+
+  const handleOpenRestock = (p: Product) => {
+    setRestockProduct(p);
+    setRestockAmount("10");
+    setRestockMode("add");
+    setErrorMsg(null);
+  };
+
+  const handleCloseRestock = () => {
+    if (isSubmitting) return;
+    setRestockProduct(null);
+    setErrorMsg(null);
+  };
+
+  const handleConfirmRestock = async () => {
+    if (!restockProduct) return;
+    const parsed = parseInt(restockAmount, 10);
+    if (isNaN(parsed)) {
+      setErrorMsg("Please enter a valid stock quantity number.");
+      return;
+    }
+    if (restockMode === "add" && parsed <= 0) {
+      setErrorMsg("Please enter a quantity greater than 0 to add.");
+      return;
+    }
+    if (restockMode === "set" && parsed < 0) {
+      setErrorMsg("Stock quantity cannot be negative.");
+      return;
+    }
+
+    const newStockTotal = restockMode === "add" ? restockProduct.stock + parsed : parsed;
+    setIsSubmitting(true);
+    setErrorMsg(null);
+
+    try {
+      await api.products.updateStock(restockProduct.id, newStockTotal);
+      toast.success(
+        restockMode === "add"
+          ? `Restocked "${restockProduct.name}" (+${parsed} units). New stock: ${newStockTotal} units.`
+          : `Updated stock of "${restockProduct.name}" to ${newStockTotal} units.`
+      );
+      await refreshData();
+      handleCloseRestock();
+    } catch (err: any) {
+      const msg = err.message || "Failed to update product stock.";
+      setErrorMsg(msg);
+      toast.error(msg);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const currentStock = restockProduct?.stock ?? 0;
+  const parsedAmt = parseInt(restockAmount, 10) || 0;
+  const calculatedTotal = restockMode === "add" ? currentStock + parsedAmt : parsedAmt;
 
   return (
     <div className="p-6 space-y-5">
@@ -2029,23 +2289,23 @@ function InventoryPage({ products, categories = CATEGORIES, catMeta = CAT_META }
 
       {/* Summary cards */}
       <div className="grid grid-cols-3 gap-4">
-        <div className="bg-card rounded-2xl border border-border p-5 text-center">
+        <div className="bg-card rounded-2xl border border-border p-5 text-center shadow-sm">
           <p className="text-3xl font-extrabold text-foreground">{products.length}</p>
-          <p className="text-sm text-muted-foreground mt-1">Total Products</p>
+          <p className="text-sm text-muted-foreground mt-1 font-medium">Total Products</p>
         </div>
-        <div className="bg-red-50 rounded-2xl border border-red-200 p-5 text-center">
+        <div className="bg-red-50/80 rounded-2xl border border-red-200 p-5 text-center shadow-sm">
           <p className="text-3xl font-extrabold text-red-500">{lowCount}</p>
-          <p className="text-sm text-red-600 mt-1">Low Stock</p>
+          <p className="text-sm text-red-600 mt-1 font-medium">Low Stock</p>
         </div>
-        <div className="bg-green-50 rounded-2xl border border-green-200 p-5 text-center">
+        <div className="bg-green-50/80 rounded-2xl border border-green-200 p-5 text-center shadow-sm">
           <p className="text-3xl font-extrabold text-[#22c55e]">{products.length - lowCount}</p>
-          <p className="text-sm text-green-700 mt-1">Well Stocked</p>
+          <p className="text-sm text-green-700 mt-1 font-medium">Well Stocked</p>
         </div>
       </div>
 
       {/* Search + category dropdown + stock filter */}
-      <div className="flex gap-3">
-        <div className="relative flex-1">
+      <div className="flex gap-3 flex-wrap sm:flex-nowrap">
+        <div className="relative flex-1 min-w-[220px]">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <input
             value={search}
@@ -2059,21 +2319,21 @@ function InventoryPage({ products, categories = CATEGORIES, catMeta = CAT_META }
           onChange={e => setSelectedCat(e.target.value)}
           className="px-3 py-2.5 rounded-xl border border-border bg-card text-sm font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-[#22c55e]/30 cursor-pointer"
         >
-          <option value="All">All</option>
+          <option value="All">All Categories</option>
           {categories.map(cat => (
             <option key={cat} value={cat}>{cat}</option>
           ))}
         </select>
         <button
           onClick={() => setStockFilter(stockFilter === "low" ? "all" : "low")}
-          className={`px-4 py-2.5 rounded-xl border text-sm font-bold transition-all ${stockFilter === "low" ? "bg-red-500 text-white border-red-500" : "bg-card text-muted-foreground border-border hover:border-gray-400"}`}
+          className={`px-4 py-2.5 rounded-xl border text-sm font-bold transition-all shrink-0 ${stockFilter === "low" ? "bg-red-500 text-white border-red-500 shadow-sm" : "bg-card text-muted-foreground border-border hover:border-gray-400"}`}
         >
           Low Stock
         </button>
       </div>
 
       {/* Product table */}
-      <div className="bg-card rounded-2xl border border-border overflow-hidden">
+      <div className="bg-card rounded-2xl border border-border overflow-hidden shadow-sm">
         <div className="px-5 py-3 border-b border-border bg-muted/30 flex items-center justify-between">
           <span className="text-sm font-bold text-foreground">
             {selectedCat === "All" ? "All Products" : (
@@ -2083,49 +2343,250 @@ function InventoryPage({ products, categories = CATEGORIES, catMeta = CAT_META }
               </span>
             )}
           </span>
-          <span className="text-xs text-muted-foreground">{filtered.length} item{filtered.length !== 1 ? "s" : ""}</span>
+          <span className="text-xs text-muted-foreground font-medium">{filtered.length} item{filtered.length !== 1 ? "s" : ""}</span>
         </div>
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-border bg-muted/40">
-              <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Product</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Category</th>
-              <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Stock</th>
-              <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
-              <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Action</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {filtered.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="py-12 text-center text-muted-foreground text-sm">No products found.</td>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-border bg-muted/40">
+                <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Product</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Category</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Stock</th>
+                <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Action</th>
               </tr>
-            ) : filtered.map(p => (
-              <tr key={p.id} className={`hover:bg-muted/20 transition-colors ${p.lowStock ? "bg-red-50/40" : ""}`}>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    {p.lowStock && <AlertTriangle size={14} className="text-red-500 shrink-0" />}
-                    <span className="text-sm font-semibold text-foreground">{p.name}</span>
-                  </div>
-                </td>
-                <td className="px-4 py-3">
-                  <button
-                    onClick={() => setSelectedCat(p.category)}
-                    className={`px-2 py-0.5 rounded-md text-xs font-semibold hover:opacity-80 transition-opacity ${CAT_COLORS[p.category] ?? "bg-gray-100 text-gray-700"}`}
-                  >
-                    {p.category}
-                  </button>
-                </td>
-                <td className="px-4 py-3 text-right text-sm font-bold" style={{ fontFamily: "'DM Mono', monospace", color: p.lowStock ? "#ef4444" : "#0f172a" }}>{p.stock} units</td>
-                <td className="px-4 py-3 text-center">{p.lowStock ? <Badge variant="danger">Restock Needed</Badge> : <Badge variant="success">OK</Badge>}</td>
-                <td className="px-4 py-3 text-right">
-                  <button className="px-3 py-1.5 text-xs font-bold text-[#22c55e] border border-[#22c55e] bg-white hover:bg-[#22c55e] hover:text-white rounded-lg transition-all">+ Restock</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-12 text-center text-muted-foreground text-sm">No products found.</td>
+                </tr>
+              ) : filtered.map(p => (
+                <tr key={p.id} className={`hover:bg-muted/20 transition-colors ${p.lowStock ? "bg-red-50/40" : ""}`}>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      {p.lowStock && <AlertTriangle size={14} className="text-red-500 shrink-0" />}
+                      <span className="text-sm font-semibold text-foreground">{p.name}</span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <button
+                      onClick={() => setSelectedCat(p.category)}
+                      className={`px-2 py-0.5 rounded-md text-xs font-semibold hover:opacity-80 transition-opacity ${CAT_COLORS[p.category] ?? "bg-gray-100 text-gray-700"}`}
+                    >
+                      {p.category}
+                    </button>
+                  </td>
+                  <td className="px-4 py-3 text-right text-sm font-bold" style={{ fontFamily: "'DM Mono', monospace", color: p.lowStock ? "#ef4444" : "#0f172a" }}>
+                    {p.stock} units
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    {p.lowStock ? <Badge variant="danger">Restock Needed</Badge> : <Badge variant="success">OK</Badge>}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <button
+                      onClick={() => handleOpenRestock(p)}
+                      className="px-3 py-1.5 text-xs font-bold text-[#22c55e] border border-[#22c55e] bg-white hover:bg-[#22c55e] hover:text-white rounded-lg transition-all shadow-sm flex items-center gap-1 ml-auto"
+                    >
+                      <Plus size={13} /> Restock
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
+
+      {/* Restock Modal */}
+      {restockProduct && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl border border-gray-100 shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50/50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-[#22c55e] flex items-center justify-center border border-emerald-100">
+                  <TrendingUp size={20} />
+                </div>
+                <div>
+                  <h2 className="font-extrabold text-[#1f2937] text-base leading-tight">Restock Product</h2>
+                  <p className="text-xs text-gray-500 mt-0.5">Update inventory stock level</p>
+                </div>
+              </div>
+              <button
+                onClick={handleCloseRestock}
+                disabled={isSubmitting}
+                className="p-2 hover:bg-gray-100 rounded-xl text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-50"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-4">
+              {/* Product Info Card */}
+              <div className="p-3.5 bg-gray-50 rounded-2xl border border-gray-200/80 flex items-center justify-between">
+                <div className="min-w-0 pr-3">
+                  <p className="font-bold text-[#1f2937] text-sm truncate">{restockProduct.name}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md ${CAT_COLORS[restockProduct.category] ?? "bg-gray-100 text-gray-700"}`}>
+                      {restockProduct.category}
+                    </span>
+                    {restockProduct.lowStock ? (
+                      <span className="text-[11px] font-bold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-md flex items-center gap-1">
+                        <AlertTriangle size={11} /> Low Stock
+                      </span>
+                    ) : (
+                      <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+                        Well Stocked
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="text-right shrink-0 bg-white px-3 py-1.5 rounded-xl border border-gray-200 shadow-sm">
+                  <span className="text-xs text-gray-400 block font-medium">Current</span>
+                  <span className="text-sm font-extrabold text-[#1f2937]" style={{ fontFamily: "'DM Mono', monospace" }}>
+                    {restockProduct.stock} units
+                  </span>
+                </div>
+              </div>
+
+              {/* Mode Switcher */}
+              <div className="grid grid-cols-2 gap-1.5 p-1 bg-gray-100 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => { setRestockMode("add"); setRestockAmount("10"); }}
+                  className={`py-1.5 text-xs font-bold rounded-lg transition-all ${restockMode === "add" ? "bg-white text-[#1f2937] shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+                >
+                  + Add to Stock
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setRestockMode("set"); setRestockAmount(String(restockProduct.stock)); }}
+                  className={`py-1.5 text-xs font-bold rounded-lg transition-all ${restockMode === "set" ? "bg-white text-[#1f2937] shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+                >
+                  Set Total Count
+                </button>
+              </div>
+
+              {/* Quantity Input Area */}
+              <div>
+                <label className="block text-xs font-bold text-[#1f2937] mb-1.5">
+                  {restockMode === "add" ? "Quantity to Add" : "New Total Stock Quantity"}
+                </label>
+                <div className="flex items-center gap-2">
+                  {restockMode === "add" && (
+                    <button
+                      type="button"
+                      onClick={() => setRestockAmount(String(Math.max(1, (parseInt(restockAmount, 10) || 0) - 5)))}
+                      className="w-10 h-10 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 flex items-center justify-center text-gray-600 font-bold shrink-0 transition-colors"
+                    >
+                      <Minus size={15} />
+                    </button>
+                  )}
+                  <input
+                    type="number"
+                    min={restockMode === "add" ? "1" : "0"}
+                    value={restockAmount}
+                    onChange={e => setRestockAmount(e.target.value)}
+                    placeholder={restockMode === "add" ? "e.g. 20" : "e.g. 50"}
+                    className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-center text-base font-extrabold text-[#1f2937] focus:outline-none focus:ring-2 focus:ring-[#22c55e]/30 focus:border-[#22c55e]"
+                    style={{ fontFamily: "'DM Mono', monospace" }}
+                    autoFocus
+                  />
+                  {restockMode === "add" && (
+                    <button
+                      type="button"
+                      onClick={() => setRestockAmount(String((parseInt(restockAmount, 10) || 0) + 5))}
+                      className="w-10 h-10 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 flex items-center justify-center text-gray-600 font-bold shrink-0 transition-colors"
+                    >
+                      <Plus size={15} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Quick Add Presets */}
+                {restockMode === "add" && (
+                  <div className="flex items-center gap-1.5 mt-2.5">
+                    <span className="text-[11px] text-gray-400 font-medium mr-1">Quick add:</span>
+                    {[5, 10, 20, 50, 100].map(val => (
+                      <button
+                        key={val}
+                        type="button"
+                        onClick={() => setRestockAmount(String(val))}
+                        className={`px-2.5 py-1 text-xs font-bold rounded-lg border transition-all ${
+                          parseInt(restockAmount, 10) === val
+                            ? "bg-[#22c55e] text-white border-[#22c55e]"
+                            : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                        }`}
+                      >
+                        +{val}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Calculation / Stock Preview */}
+              <div className="p-3.5 bg-emerald-50/70 rounded-2xl border border-emerald-100 space-y-1.5">
+                <div className="flex justify-between text-xs text-gray-600">
+                  <span>Current stock:</span>
+                  <span className="font-semibold" style={{ fontFamily: "'DM Mono', monospace" }}>{currentStock} units</span>
+                </div>
+                <div className="flex justify-between text-xs text-gray-600">
+                  <span>{restockMode === "add" ? "Adding:" : "Stock Adjustment:"}</span>
+                  <span className="font-semibold text-emerald-700" style={{ fontFamily: "'DM Mono', monospace" }}>
+                    {restockMode === "add" ? `+${parsedAmt}` : `${calculatedTotal - currentStock >= 0 ? `+${calculatedTotal - currentStock}` : calculatedTotal - currentStock}`} units
+                  </span>
+                </div>
+                <div className="pt-1.5 border-t border-emerald-200/60 flex justify-between items-center">
+                  <span className="text-xs font-extrabold text-[#1f2937]">New Total Stock:</span>
+                  <span className="text-base font-extrabold text-[#16a34a]" style={{ fontFamily: "'DM Mono', monospace" }}>
+                    {Math.max(0, calculatedTotal)} units
+                  </span>
+                </div>
+              </div>
+
+              {/* Error Message */}
+              {errorMsg && (
+                <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs font-bold text-red-600 flex items-center gap-2">
+                  <AlertTriangle size={15} className="shrink-0 text-red-500" />
+                  <span>{errorMsg}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50 flex gap-3">
+              <button
+                type="button"
+                onClick={handleCloseRestock}
+                disabled={isSubmitting}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-bold text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmRestock}
+                disabled={isSubmitting || isNaN(calculatedTotal) || calculatedTotal < 0}
+                className="flex-1 py-2.5 rounded-xl bg-[#22c55e] text-white text-sm font-bold hover:bg-[#16a34a] transition-all shadow-md shadow-emerald-500/20 disabled:opacity-50 flex items-center justify-center gap-1.5"
+              >
+                {isSubmitting ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Updating...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle size={15} /> Confirm Restock
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2613,6 +3074,8 @@ function ReportsPage({ products = [] }: { products?: Product[] }) {
   const [transactions, setTransactions] = useState<TransactionItem[]>([]);
   const [registeredCustomers, setRegisteredCustomers] = useState<RegisteredCustomer[]>([]);
 
+  const [trendRange, setTrendRange] = useState<"7d" | "30d" | "monthly">("7d");
+
   useEffect(() => {
     let isMounted = true;
     async function loadData() {
@@ -2650,25 +3113,80 @@ function ReportsPage({ products = [] }: { products?: Product[] }) {
     return products.filter(p => p.category === selectedInventoryCat);
   }, [products, selectedInventoryCat]);
 
-  const monthlyChartData = useMemo(() => {
-    if (transactions.length === 0) {
-      return [
-        { label: "Mon", value: 0 },
-        { label: "Tue", value: 0 },
-        { label: "Wed", value: 0 },
-        { label: "Thu", value: 0 },
-        { label: "Fri", value: 0 },
-        { label: "Sat", value: 0 },
-        { label: "Sun", value: 0 },
-      ];
+  // Professional chronological revenue trend calculation
+  const trendChartData = useMemo(() => {
+    const now = new Date();
+
+    if (trendRange === "7d") {
+      // Continuous last 7 days chronologically
+      const days: { key: string; label: string }[] = [];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+        days.push({ key, label });
+      }
+      const map: Record<string, number> = Object.fromEntries(days.map(d => [d.key, 0]));
+
+      transactions.forEach(t => {
+        if (!t.date) return;
+        const d = new Date(t.date);
+        if (isNaN(d.getTime())) return;
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        if (key in map) {
+          map[key] += Number(t.total_amount || 0);
+        }
+      });
+
+      return days.map(d => ({ label: d.label, value: map[d.key] || 0 }));
     }
-    const map: Record<string, number> = {};
+
+    if (trendRange === "30d") {
+      // Continuous last 30 days chronologically
+      const days: { key: string; label: string }[] = [];
+      for (let i = 29; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+        days.push({ key, label });
+      }
+      const map: Record<string, number> = Object.fromEntries(days.map(d => [d.key, 0]));
+
+      transactions.forEach(t => {
+        if (!t.date) return;
+        const d = new Date(t.date);
+        if (isNaN(d.getTime())) return;
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        if (key in map) {
+          map[key] += Number(t.total_amount || 0);
+        }
+      });
+
+      return days.map(d => ({ label: d.label, value: map[d.key] || 0 }));
+    }
+
+    // Monthly: Jan to Dec for the current year
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const map: Record<number, number> = Object.fromEntries(months.map((_, i) => [i, 0]));
+    const currentYear = now.getFullYear();
+
     transactions.forEach(t => {
-      const d = t.date ? new Date(t.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "Today";
-      map[d] = (map[d] || 0) + Number(t.total_amount || 0);
+      if (!t.date) return;
+      const d = new Date(t.date);
+      if (isNaN(d.getTime())) return;
+      if (d.getFullYear() === currentYear) {
+        map[d.getMonth()] = (map[d.getMonth()] || 0) + Number(t.total_amount || 0);
+      }
     });
-    return Object.entries(map).map(([label, value]) => ({ label, value }));
-  }, [transactions]);
+
+    return months.map((label, i) => ({ label, value: map[i] || 0 }));
+  }, [transactions, trendRange]);
+
+  const trendTotal = useMemo(() => trendChartData.reduce((sum, d) => sum + d.value, 0), [trendChartData]);
+  const avgDailyRevenue = useMemo(() => (trendChartData.length > 0 ? trendTotal / trendChartData.length : 0), [trendChartData, trendTotal]);
+  const peakDay = useMemo(() => {
+    return trendChartData.reduce((max, d) => (d.value > max.value ? d : max), { label: "N/A", value: 0 });
+  }, [trendChartData]);
 
   return (
     <div className="p-6 space-y-5">
@@ -2703,9 +3221,85 @@ function ReportsPage({ products = [] }: { products?: Product[] }) {
             </div>
           </div>
 
-          <div className="bg-card rounded-2xl border border-border p-5">
-            <h3 className="font-bold text-foreground mb-4">Revenue Trend</h3>
-            <SimpleBarChart data={monthlyChartData} height={240} />
+          {/* Global Timeframe Selector & Key Trend Stats */}
+          <div className="bg-card rounded-2xl border border-border p-5 shadow-sm space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <TrendingUp size={18} className="text-emerald-600" />
+                  <h3 className="font-extrabold text-foreground text-lg">Revenue Performance & Analytics</h3>
+                </div>
+                <p className="text-muted-foreground text-xs mt-0.5">Live chronological sales velocity and period metrics</p>
+              </div>
+
+              {/* Timeframe Controls */}
+              <div className="flex bg-muted p-1 rounded-xl">
+                {(["7d", "30d", "monthly"] as const).map(r => (
+                  <button
+                    key={r}
+                    onClick={() => setTrendRange(r)}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${trendRange === r ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                  >
+                    {r === "7d" ? "Last 7 Days" : r === "30d" ? "Last 30 Days" : "Monthly (Year)"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Quick Metrics Bar */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-muted/40 rounded-xl border border-border text-xs">
+              <div>
+                <span className="text-muted-foreground font-medium">Period Revenue:</span>
+                <p className="text-sm font-extrabold text-foreground mt-0.5" style={{ fontFamily: "'DM Mono', monospace" }}>{peso(trendTotal)}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground font-medium">Daily Average:</span>
+                <p className="text-sm font-extrabold text-emerald-600 mt-0.5" style={{ fontFamily: "'DM Mono', monospace" }}>{peso(avgDailyRevenue)}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground font-medium">Peak Performance:</span>
+                <p className="text-sm font-extrabold text-blue-600 mt-0.5" style={{ fontFamily: "'DM Mono', monospace" }}>
+                  {peakDay.value > 0 ? `${peso(peakDay.value)} (${peakDay.label})` : "₱0.00"}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Two Split Charts: Bar Graph & Area Graph */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* 1. Bar Chart Card */}
+            <div className="bg-card rounded-2xl border border-border p-5 shadow-sm space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <BarChart3 size={17} className="text-emerald-600" />
+                    <h3 className="font-extrabold text-foreground text-base">Revenue Breakdown</h3>
+                  </div>
+                  <p className="text-muted-foreground text-xs mt-0.5">Discrete sales totals per interval</p>
+                </div>
+                <Badge variant="success">Bar Chart</Badge>
+              </div>
+              <div className="pt-2">
+                <SimpleBarChart data={trendChartData} height={230} color="#10b981" />
+              </div>
+            </div>
+
+            {/* 2. Area Chart Card */}
+            <div className="bg-card rounded-2xl border border-border p-5 shadow-sm space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <TrendingUp size={17} className="text-emerald-600" />
+                    <h3 className="font-extrabold text-foreground text-base">Revenue Trendline</h3>
+                  </div>
+                  <p className="text-muted-foreground text-xs mt-0.5">Continuous sales velocity and trajectory</p>
+                </div>
+                <Badge variant="info">Area Chart</Badge>
+              </div>
+              <div className="pt-2">
+                <SimpleLineChart data={trendChartData} height={230} color="#059669" />
+              </div>
+            </div>
           </div>
 
           <div className="bg-card rounded-2xl border border-border p-5">
@@ -2904,7 +3498,7 @@ function POSPage({ products, categories = CATEGORIES }: { products: Product[]; c
       try {
         resTrx = await api.transactions.create({
           customer_id: linkedCustomer ? linkedCustomer.id : null,
-          cashier_id: 1,
+          cashier_id: getSavedUser()?.id || 1,
           cash_tendered: cash,
           items: apiItems,
         });
@@ -3151,43 +3745,527 @@ function POSPage({ products, categories = CATEGORIES }: { products: Product[]; c
 
 // ─── Staff Dashboard ──────────────────────────────────────────────────────────
 
-function StaffDashboard({ onNavigate, products = INITIAL_PRODUCTS }: { onNavigate: (p: StaffPage) => void; products?: Product[] }) {
-  const todayTotal = TRANSACTIONS.reduce((s, t) => s + t.total, 0);
-  const lowStock = products.filter(p => p.lowStock).length;
+function StaffDashboard({ onNavigate, products = [] }: { onNavigate: (p: StaffPage) => void; products?: Product[] }) {
+  const { transactions, refreshData } = useStore();
+  const user = getSavedUser();
+  const staffName = user?.name || "Cashier";
+
+  const [selectedReceipt, setSelectedReceipt] = useState<TransactionItem | null>(null);
+  const [receiptItems, setReceiptItems] = useState<Array<{ name: string; qty: number; price: number }>>([]);
+  const [loadingItems, setLoadingItems] = useState(false);
+  const [showLowStockModal, setShowLowStockModal] = useState(false);
+  const [lowStockSearch, setLowStockSearch] = useState("");
+
+  useEffect(() => {
+    refreshData();
+  }, [refreshData]);
+
+  // Determine dynamic greeting based on current time
+  const greeting = useMemo(() => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good morning";
+    if (hour < 18) return "Good afternoon";
+    return "Good evening";
+  }, []);
+
+  // Filter today's transactions
+  const isToday = (dateStr?: string | null) => {
+    if (!dateStr) return false;
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return false;
+    const now = new Date();
+    return (
+      d.getFullYear() === now.getFullYear() &&
+      d.getMonth() === now.getMonth() &&
+      d.getDate() === now.getDate()
+    );
+  };
+
+  const todayTransactions = useMemo(() => {
+    return transactions.filter(t => isToday(t.date));
+  }, [transactions]);
+
+  const todaySales = useMemo(() => {
+    return todayTransactions.reduce((s, t) => s + Number(t.total_amount || 0), 0);
+  }, [todayTransactions]);
+
+  const lowStockProducts = useMemo(() => {
+    return products.filter(p => p.stock !== undefined && p.stock <= 10);
+  }, [products]);
+
+  const avgTicket = useMemo(() => {
+    return todayTransactions.length > 0 ? todaySales / todayTransactions.length : 0;
+  }, [todayTransactions, todaySales]);
+
+  // Recent transactions to show (prefer today's, fallback to all recent)
+  const displayTransactions = useMemo(() => {
+    return todayTransactions.length > 0 ? todayTransactions : transactions.slice(0, 8);
+  }, [todayTransactions, transactions]);
+
+  const handleOpenReceipt = async (t: TransactionItem) => {
+    setSelectedReceipt(t);
+    setLoadingItems(true);
+    try {
+      const items: any = await api.transactions.getItems(t.id);
+      setReceiptItems(items.map((i: any) => ({
+        name: i.product_name || i.name,
+        qty: Number(i.quantity || 1),
+        price: Number(i.unit_price || i.price || 0)
+      })));
+    } catch {
+      setReceiptItems([]);
+    } finally {
+      setLoadingItems(false);
+    }
+  };
 
   return (
     <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-extrabold text-foreground">Good afternoon, Maria!</h1>
-        <p className="text-muted-foreground text-sm">{new Date().toLocaleDateString("en-PH", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p>
-      </div>
-
-      <div className="grid grid-cols-3 gap-4">
-        <StatCard icon={<Receipt size={20} />} label="Today's Transactions" value={TRANSACTIONS.length} sub="All completed" color="green" />
-        <StatCard icon={<TrendingUp size={20} />} label="Today's Sales" value={peso(todayTotal)} color="blue" />
-        <StatCard icon={<Package size={20} />} label="Products Available" value={products.length} sub={`${lowStock} low on stock`} color="purple" />
-      </div>
-
-      <div className="bg-card rounded-2xl border border-border p-5">
-        <h3 className="font-extrabold text-foreground mb-4">Today's Transactions</h3>
-        <div className="space-y-2.5">
-          {TRANSACTIONS.map(t => (
-            <div key={t.id} className="flex items-center gap-3 p-3.5 bg-background rounded-xl">
-              <div className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
-                <CheckCircle size={15} className="text-emerald-600" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-foreground">{t.customer}</p>
-                <p className="text-xs text-muted-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{t.id}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-sm font-extrabold text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{peso(t.total)}</p>
-                <p className="text-xs text-muted-foreground">{t.date.split(" ").slice(-2).join(" ")}</p>
-              </div>
-            </div>
-          ))}
+      {/* Header Banner */}
+      <div className="flex items-center justify-between flex-wrap gap-4 bg-card p-6 rounded-2xl border border-border shadow-sm">
+        <div>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-2xl font-extrabold text-foreground">
+              {greeting}, {staffName}!
+            </h1>
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 border border-emerald-200">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Active Register
+            </span>
+          </div>
+          <p className="text-muted-foreground text-sm mt-1">
+            {new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+          </p>
         </div>
       </div>
+
+      {/* Metric Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-card p-5 rounded-2xl border border-border shadow-sm flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
+            <Receipt size={22} className="text-emerald-600" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Today's Transactions</p>
+            <p className="text-2xl font-extrabold text-foreground mt-0.5" style={{ fontFamily: "'DM Mono', monospace" }}>
+              {todayTransactions.length}
+            </p>
+            <p className="text-xs text-emerald-600 font-semibold mt-0.5">All Completed</p>
+          </div>
+        </div>
+
+        <div className="bg-card p-5 rounded-2xl border border-border shadow-sm flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center shrink-0">
+            <TrendingUp size={22} className="text-blue-600" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Today's Sales</p>
+            <p className="text-2xl font-extrabold text-foreground mt-0.5" style={{ fontFamily: "'DM Mono', monospace" }}>
+              {peso(todaySales)}
+            </p>
+            <p className="text-xs text-blue-600 font-semibold mt-0.5">Live Shift Revenue</p>
+          </div>
+        </div>
+
+        <div className="bg-card p-5 rounded-2xl border border-border shadow-sm flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center shrink-0">
+            <Package size={22} className="text-purple-600" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Available Products</p>
+            <p className="text-2xl font-extrabold text-foreground mt-0.5" style={{ fontFamily: "'DM Mono', monospace" }}>
+              {products.length}
+            </p>
+          </div>
+        </div>
+
+        <div className="bg-card p-5 rounded-2xl border border-border shadow-sm flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
+            <ClipboardList size={22} className="text-amber-600" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Average Sale</p>
+            <p className="text-2xl font-extrabold text-foreground mt-0.5" style={{ fontFamily: "'DM Mono', monospace" }}>
+              {peso(avgTicket)}
+            </p>
+            <p className="text-xs text-muted-foreground font-semibold mt-0.5">Per receipt</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Grid: Transactions Table + Quick Sidebar */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left 2 Cols: Today's Transactions */}
+        <div className="lg:col-span-2 bg-card rounded-2xl border border-border shadow-sm p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Receipt size={18} className="text-emerald-600" />
+              <h3 className="font-extrabold text-foreground text-lg">
+                {todayTransactions.length > 0 ? "Today's Transactions" : "Recent Transactions"}
+              </h3>
+              <span className="px-2 py-0.5 text-xs font-bold bg-muted text-muted-foreground rounded-md">
+                {displayTransactions.length}
+              </span>
+            </div>
+            <button
+              onClick={() => onNavigate("transactions")}
+              className="text-xs font-bold text-emerald-600 hover:text-emerald-700 hover:underline flex items-center gap-1"
+            >
+              View All History <ChevronRight size={14} />
+            </button>
+          </div>
+
+          {displayTransactions.length === 0 ? (
+            <div className="text-center py-12 border border-dashed border-border rounded-xl space-y-3">
+              <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mx-auto text-muted-foreground">
+                <Receipt size={24} />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-foreground">No transactions recorded yet today</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Process customer checkout through Point of Sale</p>
+              </div>
+              <button
+                onClick={() => onNavigate("pos")}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-sm inline-flex items-center gap-1.5"
+              >
+                <ShoppingCart size={14} /> Launch POS
+              </button>
+            </div>
+          ) : (
+            <div className="divide-y divide-border">
+              {displayTransactions.map((t, idx) => {
+                const rawCustomer = t.customer || (t as any).customer_name;
+                const isRegistered = Boolean(
+                  rawCustomer &&
+                  rawCustomer.trim() !== "" &&
+                  rawCustomer.toLowerCase() !== "walk-in" &&
+                  rawCustomer.toLowerCase() !== "walk-in customer"
+                );
+                const displayCustName = isRegistered ? rawCustomer : "Walk-in Customer";
+                const receiptNumber = t.receipt_no || (t as any).receipt_number || `REC-${t.id}`;
+
+                return (
+                  <div
+                    key={t.id || idx}
+                    onClick={() => handleOpenReceipt(t)}
+                    className="flex items-center justify-between py-3.5 px-3 rounded-xl hover:bg-muted/50 cursor-pointer transition-colors group"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform ${
+                        isRegistered
+                          ? "bg-purple-100 text-purple-700 border border-purple-200"
+                          : "bg-emerald-50 text-emerald-600 border border-emerald-100"
+                      }`}>
+                        {isRegistered ? (
+                          <span className="font-extrabold text-sm">{displayCustName.charAt(0)}</span>
+                        ) : (
+                          <CheckCircle size={18} />
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm font-extrabold text-foreground truncate">
+                            {displayCustName}
+                          </p>
+                          {isRegistered && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-100 text-purple-700 border border-purple-200">
+                              Member Account
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                          <span style={{ fontFamily: "'DM Mono', monospace" }}>{receiptNumber}</span>
+                          <span>•</span>
+                          <span>{t.date ? new Date(t.date).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }) : "Just now"}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3 shrink-0">
+                      <div className="text-right">
+                        <p className="text-sm font-extrabold text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>
+                          {peso(Number(t.total_amount || 0))}
+                        </p>
+                        <span className="inline-block text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">
+                          Completed
+                        </span>
+                      </div>
+                      <ChevronRight size={16} className="text-muted-foreground opacity-50 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Right 1 Col: Low Stock Warning */}
+        <div className="space-y-6">
+          {/* Low Stock Watchlist */}
+          <div className="bg-card rounded-2xl border border-border shadow-sm p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertTriangle size={16} className="text-amber-500" />
+                <h4 className="text-sm font-extrabold text-foreground">Low Stock Alert</h4>
+              </div>
+              <button
+                onClick={() => setShowLowStockModal(true)}
+                className="px-2.5 py-0.5 text-xs font-bold bg-amber-100 text-amber-800 hover:bg-amber-200 rounded-md transition-colors flex items-center gap-1 cursor-pointer"
+              >
+                {lowStockProducts.length} items <ChevronRight size={12} />
+              </button>
+            </div>
+
+            {lowStockProducts.length === 0 ? (
+              <p className="text-xs text-muted-foreground py-2 text-center">All inventory levels are healthy.</p>
+            ) : (
+              <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                {lowStockProducts.slice(0, 6).map(p => (
+                  <div key={p.id} className="flex items-center justify-between p-2.5 bg-muted/40 rounded-xl text-xs hover:bg-muted/70 transition-colors">
+                    <span className="font-semibold text-foreground truncate max-w-[150px]">{p.name}</span>
+                    <span className="px-2 py-0.5 rounded font-bold bg-red-100 text-red-600 shrink-0">
+                      {p.stock} left
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {lowStockProducts.length > 0 && (
+              <button
+                onClick={() => setShowLowStockModal(true)}
+                className="w-full py-2 bg-amber-50 hover:bg-amber-100 active:scale-[0.99] text-amber-800 font-extrabold text-xs rounded-xl border border-amber-200/60 transition-all flex items-center justify-center gap-1.5 shadow-sm mt-2"
+              >
+                <Eye size={14} /> Show All Low Stock ({lowStockProducts.length})
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Receipt Preview Modal */}
+      {selectedReceipt && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-card w-full max-w-md rounded-2xl border border-border shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="px-5 py-4 border-b border-border flex items-center justify-between bg-muted/40">
+              <div className="flex items-center gap-2">
+                <Receipt size={18} className="text-emerald-600" />
+                <h3 className="font-extrabold text-foreground text-sm">Receipt Preview</h3>
+              </div>
+              <button
+                onClick={() => setSelectedReceipt(null)}
+                className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-muted text-muted-foreground transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Receipt Body */}
+            <div className="p-6 space-y-4 font-mono text-xs">
+              <div className="text-center space-y-1">
+                <p className="font-bold text-base text-foreground font-sans">SmartMart Supermarket</p>
+                <p className="text-muted-foreground text-[11px]">Official Sales Receipt</p>
+                <p className="text-muted-foreground text-[11px]">Receipt #{selectedReceipt.receipt_no || (selectedReceipt as any).receipt_number || selectedReceipt.id}</p>
+              </div>
+
+              <div className="border-t border-b border-dashed border-border py-2 space-y-1 text-muted-foreground text-[11px]">
+                <div className="flex justify-between">
+                  <span>Customer:</span>
+                  <span className="font-semibold text-foreground">
+                    {(() => {
+                      const cName = selectedReceipt.customer || (selectedReceipt as any).customer_name;
+                      const isReg = Boolean(cName && cName.toLowerCase() !== "walk-in" && cName.toLowerCase() !== "walk-in customer");
+                      return isReg ? `${cName} (Member)` : "Walk-in Customer";
+                    })()}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Cashier:</span>
+                  <span>{selectedReceipt.cashier || (selectedReceipt as any).cashier_name || staffName}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Date:</span>
+                  <span>{selectedReceipt.date || "Today"}</span>
+                </div>
+              </div>
+
+              {/* Items List */}
+              <div className="space-y-2">
+                <div className="flex justify-between font-bold text-foreground border-b border-border pb-1">
+                  <span>Item</span>
+                  <span>Amount</span>
+                </div>
+
+                {loadingItems ? (
+                  <p className="text-center text-muted-foreground py-4">Loading receipt items...</p>
+                ) : receiptItems.length === 0 ? (
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Standard Purchase</span>
+                    <span>{peso(Number(selectedReceipt.total_amount || 0))}</span>
+                  </div>
+                ) : (
+                  receiptItems.map((item, idx) => (
+                    <div key={idx} className="flex justify-between items-center text-foreground">
+                      <span className="truncate max-w-[200px]">
+                        {item.name} <span className="text-muted-foreground">×{item.qty}</span>
+                      </span>
+                      <span>{peso(item.price * item.qty)}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Totals */}
+              <div className="border-t border-border pt-2 space-y-1">
+                <div className="flex justify-between font-extrabold text-sm text-foreground">
+                  <span>Total Amount</span>
+                  <span className="text-emerald-600">{peso(Number(selectedReceipt.total_amount || 0))}</span>
+                </div>
+                {selectedReceipt.cash_tendered !== undefined && Number(selectedReceipt.cash_tendered) > 0 && (
+                  <>
+                    <div className="flex justify-between text-muted-foreground text-[11px]">
+                      <span>Cash Tendered:</span>
+                      <span>{peso(Number(selectedReceipt.cash_tendered))}</span>
+                    </div>
+                    <div className="flex justify-between text-muted-foreground text-[11px]">
+                      <span>Change:</span>
+                      <span>{peso(Number(selectedReceipt.change_amount || 0))}</span>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <p className="text-center text-[11px] text-muted-foreground border-t border-dashed border-border pt-3">
+                Thank you for shopping at SmartMart!
+              </p>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="p-4 border-t border-border bg-muted/20 flex gap-2">
+              <button
+                onClick={() => window.print()}
+                className="flex-1 py-2.5 bg-muted hover:bg-muted/80 text-foreground font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors"
+              >
+                <Printer size={14} /> Print Receipt
+              </button>
+              <button
+                onClick={() => setSelectedReceipt(null)}
+                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* All Low Stock Products Modal */}
+      {showLowStockModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-card w-full max-w-2xl rounded-2xl border border-border shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-border bg-muted/40 shrink-0">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                    <AlertTriangle size={18} />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-foreground text-base">Low Stock Inventory Watchlist</h3>
+                    <p className="text-muted-foreground text-xs">
+                      {lowStockProducts.length} product{lowStockProducts.length !== 1 ? "s" : ""} require attention (≤10 in stock)
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => { setShowLowStockModal(false); setLowStockSearch(""); }}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-muted text-muted-foreground transition-colors"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Search in modal */}
+              <div className="relative">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  type="text"
+                  value={lowStockSearch}
+                  onChange={e => setLowStockSearch(e.target.value)}
+                  placeholder="Filter low stock items by name or category..."
+                  className="w-full pl-9 pr-3 py-2 bg-background border border-border rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                />
+              </div>
+            </div>
+
+            {/* Modal Table / List */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+              {(() => {
+                const filtered = lowStockProducts.filter(p =>
+                  (p.name || "").toLowerCase().includes(lowStockSearch.toLowerCase()) ||
+                  (p.category || "").toLowerCase().includes(lowStockSearch.toLowerCase())
+                );
+
+                if (filtered.length === 0) {
+                  return (
+                    <div className="text-center py-10 text-muted-foreground text-xs">
+                      No low stock products match "{lowStockSearch}".
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="divide-y divide-border">
+                    {filtered.map(p => (
+                      <div key={p.id} className="flex items-center justify-between py-2.5 px-3 hover:bg-muted/40 rounded-xl transition-colors">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-10 h-10 rounded-lg overflow-hidden bg-muted flex items-center justify-center shrink-0 border border-border">
+                            {p.image_url ? (
+                              <img src={getProductImageUrl(p.image_url) || ""} alt={p.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <Package size={16} className="text-muted-foreground" />
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-foreground truncate">{p.name}</p>
+                            <p className="text-[11px] text-muted-foreground">{p.category} • <span style={{ fontFamily: "'DM Mono', monospace" }}>{peso(p.price)}</span></p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className={`px-2.5 py-1 rounded-md text-xs font-extrabold ${
+                            (p.stock ?? 0) <= 3
+                              ? "bg-red-100 text-red-700 border border-red-200"
+                              : "bg-amber-100 text-amber-800 border border-amber-200"
+                          }`}>
+                            {p.stock} units left
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-3.5 border-t border-border bg-muted/20 flex items-center justify-between shrink-0">
+              <span className="text-xs text-muted-foreground">
+                Showing {lowStockProducts.filter(p =>
+                  (p.name || "").toLowerCase().includes(lowStockSearch.toLowerCase()) ||
+                  (p.category || "").toLowerCase().includes(lowStockSearch.toLowerCase())
+                ).length} of {lowStockProducts.length} items
+              </span>
+              <button
+                onClick={() => { setShowLowStockModal(false); setLowStockSearch(""); }}
+                className="px-5 py-2 bg-[#1f2937] hover:bg-[#374151] text-white text-xs font-bold rounded-xl transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -4258,36 +5336,203 @@ function AdminCategoriesPage({
 
 // ─── Admin Sales Page ─────────────────────────────────────────────────────────
 
-function AdminSalesPage({ transactions }: { transactions: Transaction[] }) {
+function AdminSalesPage() {
+  const { transactions: storeTransactions, refreshData } = useStore();
+  const [localTransactions, setLocalTransactions] = useState<TransactionItem[]>([]);
+  const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState<"today" | "week" | "month">("today");
-  const total = transactions.reduce((s, t) => s + t.total, 0);
+  const [search, setSearch] = useState("");
+  const [selectedTx, setSelectedTx] = useState<TransactionItem | null>(null);
+  const [selectedItems, setSelectedItems] = useState<Array<{ name: string; qty: number; price: number }>>([]);
+  const [loadingItems, setLoadingItems] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function load() {
+      setLoading(true);
+      try {
+        const data = await api.transactions.getAll();
+        if (isMounted) setLocalTransactions(data);
+      } catch (err) {
+        console.error("Failed to load transactions for AdminSalesPage:", err);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+    load();
+    refreshData();
+    return () => { isMounted = false; };
+  }, [refreshData]);
+
+  const allTx = localTransactions.length > 0 ? localTransactions : storeTransactions;
+
+  // Filter by period (today, week, month)
+  const filteredByPeriod = useMemo(() => {
+    const now = new Date();
+    const todayYear = now.getFullYear();
+    const todayMonth = now.getMonth();
+    const todayDate = now.getDate();
+
+    if (filter === "today") {
+      return allTx.filter(t => {
+        if (!t.date) return false;
+        const d = new Date(t.date);
+        return !isNaN(d.getTime()) && d.getFullYear() === todayYear && d.getMonth() === todayMonth && d.getDate() === todayDate;
+      });
+    }
+
+    if (filter === "week") {
+      const dayOfWeek = now.getDay();
+      const diffToMon = (dayOfWeek + 6) % 7;
+      const monday = new Date(todayYear, todayMonth, todayDate - diffToMon, 0, 0, 0, 0);
+      const sunday = new Date(monday.getTime() + 7 * 24 * 60 * 60 * 1000 - 1);
+      return allTx.filter(t => {
+        if (!t.date) return false;
+        const d = new Date(t.date);
+        return !isNaN(d.getTime()) && d >= monday && d <= sunday;
+      });
+    }
+
+    // month
+    return allTx.filter(t => {
+      if (!t.date) return false;
+      const d = new Date(t.date);
+      return !isNaN(d.getTime()) && d.getFullYear() === todayYear && d.getMonth() === todayMonth;
+    });
+  }, [allTx, filter]);
+
+  // Search filter
+  const displayedTransactions = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return filteredByPeriod;
+    return filteredByPeriod.filter(t =>
+      (t.receipt_no && t.receipt_no.toLowerCase().includes(q)) ||
+      (t.customer && t.customer.toLowerCase().includes(q)) ||
+      (t.cashier && t.cashier.toLowerCase().includes(q)) ||
+      String(t.id).includes(q)
+    );
+  }, [filteredByPeriod, search]);
+
+  // Stat metrics
+  const totalRevenue = useMemo(() => {
+    return filteredByPeriod.reduce((sum, t) => sum + Number(t.total_amount || 0), 0);
+  }, [filteredByPeriod]);
+
+  const totalCount = filteredByPeriod.length;
+
+  const uniqueCustomersCount = useMemo(() => {
+    if (filteredByPeriod.length === 0) return 0;
+    const names = filteredByPeriod.map(t => (t.customer || "Walk-in").trim());
+    return new Set(names).size;
+  }, [filteredByPeriod]);
+
+  const handleSelectTransaction = async (t: TransactionItem) => {
+    setSelectedTx(t);
+    setLoadingItems(true);
+    try {
+      const items: any = await api.transactions.getItems(t.id);
+      setSelectedItems(items.map((i: any) => ({
+        name: i.product_name,
+        qty: i.quantity,
+        price: Number(i.unit_price),
+      })));
+    } catch {
+      setSelectedItems([]);
+    } finally {
+      setLoadingItems(false);
+    }
+  };
+
+  const handleExportExcel = () => {
+    const headers = ["Receipt No", "Customer", "Cashier", "Total Amount", "Cash Tendered", "Change", "Date & Time"];
+    const rows = displayedTransactions.map(t => [
+      t.receipt_no || `#${t.id}`,
+      `"${(t.customer || 'Walk-in').replace(/"/g, '""')}"`,
+      `"${(t.cashier || '').replace(/"/g, '""')}"`,
+      Number(t.total_amount || 0).toFixed(2),
+      Number(t.cash_tendered || 0).toFixed(2),
+      Number(t.change_amount || 0).toFixed(2),
+      `"${t.date || ''}"`,
+    ]);
+    const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `SmartMart_Sales_${filter}_${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("Sales report downloaded!");
+  };
+
+  const handleExportPDF = () => {
+    window.print();
+  };
+
   return (
     <div className="p-6 space-y-5 bg-[#f9fafb] min-h-full">
-      <div className="flex items-center justify-between">
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-extrabold text-[#1f2937]">Sales</h1>
           <p className="text-gray-500 text-sm">Transaction history and revenue</p>
         </div>
         <div className="flex gap-2">
-          <button className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-600 text-sm font-bold rounded-xl hover:bg-gray-50 transition-all">Export PDF</button>
-          <button className="flex items-center gap-2 px-4 py-2 bg-[#22c55e] text-white text-sm font-bold rounded-xl hover:bg-[#16a34a] transition-all shadow-sm">Export Excel</button>
+          <button onClick={handleExportPDF} className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-600 text-sm font-bold rounded-xl hover:bg-gray-50 transition-all shadow-sm">
+            <Printer size={16} /> Export PDF
+          </button>
+          <button onClick={handleExportExcel} className="flex items-center gap-2 px-4 py-2 bg-[#22c55e] text-white text-sm font-bold rounded-xl hover:bg-[#16a34a] transition-all shadow-sm">
+            <Download size={16} /> Export Excel
+          </button>
         </div>
       </div>
-      {/* Filter tabs */}
-      <div className="flex gap-2">
-        {(["today", "week", "month"] as const).map(f => (
-          <button key={f} onClick={() => setFilter(f)}
-            className={`px-4 py-2 rounded-xl text-sm font-bold transition-all capitalize ${filter === f ? "bg-[#22c55e] text-white shadow-sm" : "bg-white border border-gray-200 text-gray-500 hover:bg-gray-50"}`}>
-            {f === "today" ? "Today" : f === "week" ? "This Week" : "This Month"}
-          </button>
-        ))}
+
+      {/* Filter tabs & Search */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex gap-2 bg-gray-100 p-1 rounded-xl">
+          {(["today", "week", "month"] as const).map(f => (
+            <button key={f} onClick={() => setFilter(f)}
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all capitalize ${filter === f ? "bg-[#22c55e] text-white shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>
+              {f === "today" ? "Today" : f === "week" ? "This Week" : "This Month"}
+            </button>
+          ))}
+        </div>
+        <div className="relative w-full sm:w-72">
+          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search receipt, customer, cashier..."
+            className="w-full pl-9 pr-4 py-2 bg-white rounded-xl border border-gray-200 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#22c55e]/30 focus:border-[#22c55e] transition-all shadow-sm"
+          />
+        </div>
       </div>
-      {/* Summary */}
-      <div className="grid grid-cols-3 gap-4">
-        <StatCard icon={<TrendingUp size={20} />} label="Total Revenue" value={peso(total)} sub="All transactions" color="green" />
-        <StatCard icon={<Receipt size={20} />} label="Transactions" value={transactions.length} sub="Completed sales" color="blue" />
-        <StatCard icon={<User size={20} />} label="Unique Customers" value={new Set(transactions.map(t => t.customer)).size} sub="Including walk-ins" color="purple" />
+
+      {/* 3 Stat Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <StatCard
+          icon={<TrendingUp size={20} />}
+          label="Total Revenue"
+          value={peso(totalRevenue)}
+          sub={filter === "today" ? "Today's sales" : filter === "week" ? "This week's sales" : "This month's sales"}
+          color="green"
+        />
+        <StatCard
+          icon={<Receipt size={20} />}
+          label="Transactions"
+          value={totalCount}
+          sub="Completed sales"
+          color="blue"
+        />
+        <StatCard
+          icon={<User size={20} />}
+          label="Unique Customers"
+          value={uniqueCustomersCount}
+          sub="Including walk-ins"
+          color="purple"
+        />
       </div>
+
       {/* Table */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
         <table className="w-full text-sm">
@@ -4298,21 +5543,116 @@ function AdminSalesPage({ transactions }: { transactions: Transaction[] }) {
               <th className="text-left px-5 py-3">Cashier</th>
               <th className="text-right px-5 py-3">Total</th>
               <th className="text-right px-5 py-3">Date & Time</th>
+              <th className="text-right px-5 py-3">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {transactions.map(t => (
-              <tr key={t.id} className="hover:bg-gray-50 transition-colors">
-                <td className="px-5 py-3 font-mono text-xs text-blue-600">{t.id}</td>
-                <td className="px-5 py-3 font-medium text-[#1f2937]">{t.customer}</td>
-                <td className="px-5 py-3 text-gray-500">{t.cashier}</td>
-                <td className="px-5 py-3 text-right font-extrabold text-[#22c55e]" style={{ fontFamily: "'DM Mono', monospace" }}>{peso(t.total)}</td>
-                <td className="px-5 py-3 text-right text-xs text-gray-400">{t.date}</td>
+            {displayedTransactions.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="text-center py-12 text-gray-400 text-sm">
+                  {loading ? "Loading transactions..." : "No transactions found for this period."}
+                </td>
               </tr>
-            ))}
+            ) : (
+              displayedTransactions.map(t => (
+                <tr key={t.id} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-5 py-3 font-mono text-xs font-bold text-blue-600">
+                    {t.receipt_no || `#${t.id}`}
+                  </td>
+                  <td className="px-5 py-3 font-medium text-[#1f2937]">
+                    {t.customer || "Walk-in"}
+                  </td>
+                  <td className="px-5 py-3 text-gray-500">
+                    {t.cashier}
+                  </td>
+                  <td className="px-5 py-3 text-right font-extrabold text-[#22c55e]" style={{ fontFamily: "'DM Mono', monospace" }}>
+                    {peso(Number(t.total_amount))}
+                  </td>
+                  <td className="px-5 py-3 text-right text-xs text-gray-400 font-mono">
+                    {t.date}
+                  </td>
+                  <td className="px-5 py-3 text-right">
+                    <button
+                      onClick={() => handleSelectTransaction(t)}
+                      className="px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors"
+                    >
+                      View Receipt
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
+
+      {/* Receipt Modal */}
+      {selectedTx && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl border border-gray-200 p-6 w-full max-w-md shadow-2xl">
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <h3 className="font-extrabold text-lg text-[#1f2937]" style={{ fontFamily: "'DM Mono', monospace" }}>
+                  {selectedTx.receipt_no || `#${selectedTx.id}`}
+                </h3>
+                <p className="text-xs text-gray-400 mt-0.5">{selectedTx.date}</p>
+              </div>
+              <button onClick={() => { setSelectedTx(null); setSelectedItems([]); }} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 bg-gray-50 rounded-xl">
+                  <p className="text-xs text-gray-400">Customer</p>
+                  <p className="font-semibold text-[#1f2937] text-sm mt-0.5">{selectedTx.customer || "Walk-in"}</p>
+                </div>
+                <div className="p-3 bg-gray-50 rounded-xl">
+                  <p className="text-xs text-gray-400">Cashier</p>
+                  <p className="font-semibold text-[#1f2937] text-sm mt-0.5">{selectedTx.cashier}</p>
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Purchased Items</p>
+                {loadingItems ? (
+                  <p className="text-xs text-gray-400 py-2">Loading receipt items...</p>
+                ) : selectedItems.length === 0 ? (
+                  <p className="text-xs text-gray-400 py-2">No item breakdown available.</p>
+                ) : (
+                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                    {selectedItems.map((item, idx) => (
+                      <div key={idx} className="flex justify-between text-sm">
+                        <span className="text-[#1f2937]">{item.name} <span className="text-gray-400">×{item.qty}</span></span>
+                        <span className="font-bold text-[#1f2937]" style={{ fontFamily: "'DM Mono', monospace" }}>{peso(item.price * item.qty)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="border-t border-gray-100 pt-3 space-y-1.5">
+                <div className="flex justify-between font-extrabold text-[#1f2937]">
+                  <span>Total</span>
+                  <span style={{ fontFamily: "'DM Mono', monospace" }}>{peso(Number(selectedTx.total_amount))}</span>
+                </div>
+                <div className="flex justify-between text-sm text-gray-500">
+                  <span>Cash</span>
+                  <span style={{ fontFamily: "'DM Mono', monospace" }}>{peso(Number(selectedTx.cash_tendered))}</span>
+                </div>
+                <div className="flex justify-between text-sm font-extrabold text-[#22c55e]">
+                  <span>Change</span>
+                  <span style={{ fontFamily: "'DM Mono', monospace" }}>{peso(Number(selectedTx.change_amount))}</span>
+                </div>
+              </div>
+              <div className="flex items-center justify-between pt-2">
+                <Badge variant="success">Completed</Badge>
+                <button onClick={() => window.print()} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-[#1f2937] transition-colors">
+                  <Printer size={14} /> Print Receipt
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -4535,7 +5875,7 @@ function AdminLayout({ onLogout }: { onLogout: () => void }) {
       case "products": return <ProductsPage products={products} categories={categories} onAddProduct={handleAddProduct} />;
       case "categories": return <AdminCategoriesPage products={products} categories={categories} catMeta={catMeta} onAddCategory={handleAddCategory} />;
       case "inventory": return <InventoryPage products={products} categories={categories} catMeta={catMeta} />;
-      case "sales": return <AdminSalesPage transactions={TRANSACTIONS} />;
+      case "sales": return <AdminSalesPage />;
       case "staff": return <AdminStaffPage />;
       case "customers": return <CustomersPage />;
       case "reports": return <ReportsPage products={products} />;
