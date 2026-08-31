@@ -3,12 +3,14 @@ import { useState, useMemo, useCallback, createContext, useContext, useEffect } 
 import { Toaster, toast } from "sonner";
 import { api, getSavedUser, UserPayload, RegisteredCustomer, CustomerProfileData, DashboardSummary, TransactionItem, StaffItem } from "../api";
 import logoImg from "../assets/SmartMart_Logo.jpg";
+import ReportsPage from "./components/reports/ReportsPage";
 import {
   LayoutDashboard, Package, ShoppingCart, Users, BarChart3,
   LogOut, Search, Plus, Minus, Trash2, Bell, AlertTriangle,
   TrendingUp, CheckCircle, X, User, ClipboardList, Store,
   Receipt, Settings, Printer, ChevronRight, ShieldCheck, Pencil,
   Eye, EyeOff, Filter, Upload, Image as ImageIcon, Camera, Download,
+  Flame, Sparkles, ArrowRight, Award, ArrowLeft,
 } from "lucide-react";
 
 export const getProductImageUrl = (url?: string | null) => {
@@ -768,18 +770,22 @@ function RegisterPage({ onLogin: _onLogin, onBack, onGoLogin }: { onLogin: (role
 
   return (
     <div className="min-h-screen bg-[#f9fafb] flex flex-col">
-      <header className="bg-white border-b border-gray-200">
+      <header className="bg-white border-b border-gray-100 shadow-sm">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-          <button onClick={onBack} className="flex items-center gap-2.5">
+          <button onClick={onBack} className="flex items-center gap-2.5 group">
             <div className="w-9 h-9 rounded-xl overflow-hidden shadow-sm shrink-0">
               <img src={logoImg} alt="SmartMart Logo" className="w-full h-full object-cover" />
             </div>
-            <span className="font-extrabold text-[#1f2937] text-lg tracking-tight">SmartMart</span>
+            <span className="font-extrabold text-[#1f2937] text-lg tracking-tight group-hover:text-[#22c55e] transition-colors">SmartMart</span>
           </button>
-          <p className="text-sm text-gray-500">
-            Have an account?{" "}
-            <button onClick={onGoLogin} className="text-[#22c55e] font-bold hover:underline">Sign in</button>
-          </p>
+
+          <button
+            onClick={onBack}
+            className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-[#22c55e] font-semibold transition-colors px-3 py-1.5 rounded-xl hover:bg-gray-50"
+          >
+            <ArrowLeft size={16} />
+            <span>Back to Home</span>
+          </button>
         </div>
       </header>
 
@@ -1004,7 +1010,7 @@ function StoreProvider({ children }: { children: React.ReactNode }) {
     try {
       const [catsRes, prodsRes, settingsRes, pendingRes, registeredRes, trxRes] = await Promise.allSettled([
         api.categories.getAll(),
-        api.products.getAll(),
+        api.products.getPublic().catch(() => api.products.getAll()),
         api.settings.get(),
         api.customers.getPending(),
         api.customers.getRegistered(),
@@ -1141,17 +1147,48 @@ function StoreProvider({ children }: { children: React.ReactNode }) {
 // ── Public Navbar shared across all public pages ───────────────────────────
 function LoginScreen({ onLogin }: { onLogin: (role: Role) => void }) {
   const [page, setPage] = useState<"home" | "login" | "register">("home");
-  const { storeInfo } = useStore();
+  const { storeInfo, products } = useStore();
   const [legalModal, setLegalModal] = useState<"privacy" | "terms" | null>(null);
+  const [bestSellers, setBestSellers] = useState<any[]>([]);
+  const [loadingBestSellers, setLoadingBestSellers] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    api.products.getBestSellers(8)
+      .then(data => {
+        if (isMounted && Array.isArray(data) && data.length > 0) {
+          setBestSellers(data);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (isMounted) setLoadingBestSellers(false);
+      });
+    return () => { isMounted = false; };
+  }, []);
 
   const goLogin = () => setPage("login");
   const goRegister = () => setPage("register");
+
+  // Fallback to top products if best sellers is empty
+  const displayBestSellers = useMemo(() => {
+    if (bestSellers.length > 0) return bestSellers;
+    return products.slice(0, 8).map(p => ({
+      id: p.id,
+      name: p.name,
+      category: p.category,
+      price: p.price,
+      stock: p.stock,
+      image_url: p.image_url,
+      total_sold: 0,
+    }));
+  }, [bestSellers, products]);
 
   if (page === "login") return <LoginPage onLogin={onLogin} onBack={() => setPage("home")} onGoRegister={goRegister} />;
   if (page === "register") return <RegisterPage onLogin={onLogin} onBack={() => setPage("home")} onGoLogin={goLogin} />;
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
+    <div className="min-h-screen bg-white flex flex-col scroll-smooth">
 
       {/* ── Navbar ── */}
       <header className="bg-white border-b border-gray-100 sticky top-0 z-40 shadow-sm">
@@ -1166,6 +1203,10 @@ function LoginScreen({ onLogin }: { onLogin: (role: Role) => void }) {
           {/* Nav links */}
           <nav className="hidden md:flex items-center gap-7 text-sm font-semibold text-gray-500">
             <a href="#" className="hover:text-[#22c55e] transition-colors">Home</a>
+            <a href="#best-sellers" className="hover:text-[#22c55e] transition-colors flex items-center gap-1.5 text-gray-700 font-bold">
+              <span>Best Sellers</span>
+              <span className="text-[10px] bg-red-500 text-white font-black px-1.5 py-0.5 rounded-full uppercase leading-none">Hot</span>
+            </a>
             <a href="#about" className="hover:text-[#22c55e] transition-colors">About</a>
             <a href="#contact" className="hover:text-[#22c55e] transition-colors">Contact</a>
           </nav>
@@ -1189,7 +1230,7 @@ function LoginScreen({ onLogin }: { onLogin: (role: Role) => void }) {
           <div className="absolute top-1/2 right-12 text-[70px]">🍪</div>
           <div className="absolute top-1/3 left-1/2 text-[60px]">🥛</div>
         </div>
-        <div className="relative max-w-4xl mx-auto px-6 py-28 text-center">
+        <div className="relative max-w-4xl mx-auto px-6 py-24 sm:py-28 text-center">
           <span className="inline-flex items-center gap-2 bg-[#22c55e]/20 text-[#22c55e] text-xs font-bold uppercase tracking-widest px-4 py-1.5 rounded-full mb-6">
             <Store size={12} /> Welcome to SmartMart
           </span>
@@ -1199,6 +1240,108 @@ function LoginScreen({ onLogin }: { onLogin: (role: Role) => void }) {
           <p className="mt-6 text-gray-300 text-lg leading-relaxed max-w-2xl mx-auto">
             A smarter way to shop at your neighborhood convenience store. Create an account to browse products, check stock availability, and view your purchase history.
           </p>
+        </div>
+      </section>
+
+      {/* ── Best-Selling Products Section ── */}
+      <section id="best-sellers" className="py-20 px-6 bg-[#f9fafb] border-y border-gray-100 relative">
+        <div className="max-w-6xl mx-auto">
+          <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-4">
+            <div>
+              <span className="inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-widest text-emerald-700 bg-emerald-100/80 px-3.5 py-1.5 rounded-full mb-3">
+                <Flame size={14} className="text-amber-500 fill-amber-500" /> Hot & Trending In-Store
+              </span>
+              <h2 className="text-3xl sm:text-4xl font-extrabold text-[#1f2937] tracking-tight">
+                Best-Selling Products
+              </h2>
+              <p className="text-gray-500 text-sm mt-2 max-w-xl">
+                The most popular and frequently purchased items at SmartMart, updated in real time from completed in-store POS checkouts.
+              </p>
+            </div>
+          </div>
+
+          {loadingBestSellers && displayBestSellers.length === 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {[1, 2, 3, 4].map(i => (
+                <div key={i} className="bg-white rounded-3xl p-5 border border-gray-200 shadow-sm animate-pulse space-y-4">
+                  <div className="aspect-square bg-gray-200 rounded-2xl"></div>
+                  <div className="h-4 bg-gray-200 rounded w-2/3"></div>
+                  <div className="h-6 bg-gray-200 rounded w-1/3"></div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {displayBestSellers.map((item, idx) => (
+                <div
+                  key={item.id}
+                  className="bg-white rounded-3xl border border-gray-200/90 overflow-hidden shadow-sm hover:shadow-xl hover:border-emerald-400 transition-all duration-300 flex flex-col group relative"
+                >
+                  {/* Top Rank Badge */}
+                  <div className="absolute top-3.5 left-3.5 z-10">
+                    <span className={`inline-flex items-center gap-1 text-[11px] font-black px-2.5 py-1 rounded-lg shadow-sm ${
+                      idx === 0
+                        ? "bg-amber-400 text-gray-950 ring-2 ring-amber-300/50"
+                        : idx === 1
+                        ? "bg-slate-200 text-slate-800"
+                        : idx === 2
+                        ? "bg-amber-700 text-white"
+                        : "bg-emerald-100 text-emerald-800"
+                    }`}>
+                      <Award size={12} /> #{idx + 1} Best Seller
+                    </span>
+                  </div>
+
+                  {/* Image container */}
+                  <div className={`aspect-square w-full relative overflow-hidden flex items-center justify-center p-6 transition-colors ${CAT_BG[item.category] ?? "bg-gray-50"}`}>
+                    {item.image_url ? (
+                      <img
+                        src={getProductImageUrl(item.image_url) || ""}
+                        alt={item.name}
+                        className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
+                        onError={(e) => { (e.target as any).style.display = "none"; }}
+                      />
+                    ) : (
+                      <Package size={52} className="text-slate-300 group-hover:scale-110 transition-transform" />
+                    )}
+                  </div>
+
+                  {/* Body details */}
+                  <div className="p-5 flex-1 flex flex-col justify-between space-y-3">
+                    <div>
+                      <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+                        {item.category}
+                      </span>
+                      <h3 className="font-extrabold text-[#111827] text-base leading-snug mt-0.5 group-hover:text-emerald-700 transition-colors line-clamp-1">
+                        {item.name}
+                      </h3>
+                    </div>
+
+                    <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
+                      <div>
+                        <span className="text-xs text-gray-400 font-semibold block">Price</span>
+                        <span className="text-lg font-black text-emerald-700" style={{ fontFamily: "'DM Mono', monospace" }}>
+                          {peso(item.price)}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        {Number(item.total_sold) > 0 ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200/70 px-2 py-0.5 rounded-md">
+                            <Flame size={11} className="text-amber-500 fill-amber-500" />
+                            {item.total_sold} sold
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
+                            In Stock ({item.stock})
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
@@ -3062,388 +3205,7 @@ function CustomersPage() {
   );
 }
 
-// ─── Reports Page ─────────────────────────────────────────────────────────────
 
-type ReportTab = "sales" | "inventory" | "customers";
-
-function ReportsPage({ products = [] }: { products?: Product[] }) {
-  const [tab, setTab] = useState<ReportTab>("sales");
-  const [selectedInventoryCat, setSelectedInventoryCat] = useState<string>("All");
-  const [_loading, setLoading] = useState(false);
-  const [dashboardSummary, setDashboardSummary] = useState<DashboardSummary | null>(null);
-  const [transactions, setTransactions] = useState<TransactionItem[]>([]);
-  const [registeredCustomers, setRegisteredCustomers] = useState<RegisteredCustomer[]>([]);
-
-  const [trendRange, setTrendRange] = useState<"7d" | "30d" | "monthly">("7d");
-
-  useEffect(() => {
-    let isMounted = true;
-    async function loadData() {
-      setLoading(true);
-      try {
-        const [sumRes, txRes, custRes] = await Promise.allSettled([
-          api.dashboard.getSummary(),
-          api.transactions.getAll(),
-          api.customers.getRegistered(),
-        ]);
-        if (!isMounted) return;
-        if (sumRes.status === "fulfilled") setDashboardSummary(sumRes.value);
-        if (txRes.status === "fulfilled") setTransactions(txRes.value);
-        if (custRes.status === "fulfilled") setRegisteredCustomers(custRes.value);
-      } catch (err) {
-        console.error("Error loading reports data:", err);
-      } finally {
-        if (isMounted) setLoading(false);
-      }
-    }
-    loadData();
-    return () => { isMounted = false; };
-  }, []);
-
-  const todaySalesVal = dashboardSummary ? Number(dashboardSummary.today_sales || 0) : 0;
-  const totalTransactionsCount = transactions.length;
-  const totalRevenue = transactions.reduce((s, t) => s + Number(t.total_amount || 0), 0);
-
-  const inventoryCategories = useMemo(() => {
-    return Array.from(new Set(products.map(p => p.category))).sort();
-  }, [products]);
-
-  const filteredInventory = useMemo(() => {
-    if (selectedInventoryCat === "All") return products;
-    return products.filter(p => p.category === selectedInventoryCat);
-  }, [products, selectedInventoryCat]);
-
-  // Professional chronological revenue trend calculation
-  const trendChartData = useMemo(() => {
-    const now = new Date();
-
-    if (trendRange === "7d") {
-      // Continuous last 7 days chronologically
-      const days: { key: string; label: string }[] = [];
-      for (let i = 6; i >= 0; i--) {
-        const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
-        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        const label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-        days.push({ key, label });
-      }
-      const map: Record<string, number> = Object.fromEntries(days.map(d => [d.key, 0]));
-
-      transactions.forEach(t => {
-        if (!t.date) return;
-        const d = new Date(t.date);
-        if (isNaN(d.getTime())) return;
-        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        if (key in map) {
-          map[key] += Number(t.total_amount || 0);
-        }
-      });
-
-      return days.map(d => ({ label: d.label, value: map[d.key] || 0 }));
-    }
-
-    if (trendRange === "30d") {
-      // Continuous last 30 days chronologically
-      const days: { key: string; label: string }[] = [];
-      for (let i = 29; i >= 0; i--) {
-        const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
-        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        const label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-        days.push({ key, label });
-      }
-      const map: Record<string, number> = Object.fromEntries(days.map(d => [d.key, 0]));
-
-      transactions.forEach(t => {
-        if (!t.date) return;
-        const d = new Date(t.date);
-        if (isNaN(d.getTime())) return;
-        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        if (key in map) {
-          map[key] += Number(t.total_amount || 0);
-        }
-      });
-
-      return days.map(d => ({ label: d.label, value: map[d.key] || 0 }));
-    }
-
-    // Monthly: Jan to Dec for the current year
-    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    const map: Record<number, number> = Object.fromEntries(months.map((_, i) => [i, 0]));
-    const currentYear = now.getFullYear();
-
-    transactions.forEach(t => {
-      if (!t.date) return;
-      const d = new Date(t.date);
-      if (isNaN(d.getTime())) return;
-      if (d.getFullYear() === currentYear) {
-        map[d.getMonth()] = (map[d.getMonth()] || 0) + Number(t.total_amount || 0);
-      }
-    });
-
-    return months.map((label, i) => ({ label, value: map[i] || 0 }));
-  }, [transactions, trendRange]);
-
-  const trendTotal = useMemo(() => trendChartData.reduce((sum, d) => sum + d.value, 0), [trendChartData]);
-  const avgDailyRevenue = useMemo(() => (trendChartData.length > 0 ? trendTotal / trendChartData.length : 0), [trendChartData, trendTotal]);
-  const peakDay = useMemo(() => {
-    return trendChartData.reduce((max, d) => (d.value > max.value ? d : max), { label: "N/A", value: 0 });
-  }, [trendChartData]);
-
-  return (
-    <div className="p-6 space-y-5">
-      <div>
-        <h1 className="text-2xl font-extrabold text-foreground">Reports</h1>
-        <p className="text-muted-foreground text-sm">Business analytics and live performance reports</p>
-      </div>
-
-      <div className="flex gap-1 bg-muted rounded-xl p-1 w-fit">
-        {([["sales", "Sales"], ["inventory", "Inventory"], ["customers", "Customers"]] as [ReportTab, string][]).map(([val, label]) => (
-          <button key={val} onClick={() => setTab(val)} className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === val ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>{label}</button>
-        ))}
-      </div>
-
-      {tab === "sales" && (
-        <div className="space-y-4">
-          <div className="grid grid-cols-3 gap-4">
-            <div className="bg-card rounded-2xl border border-border p-5 text-center">
-              <p className="text-sm text-muted-foreground">Today's Sales</p>
-              <p className="text-2xl font-extrabold text-foreground mt-1" style={{ fontFamily: "'DM Mono', monospace" }}>{peso(todaySalesVal)}</p>
-              <Badge variant="success">Live</Badge>
-            </div>
-            <div className="bg-card rounded-2xl border border-border p-5 text-center">
-              <p className="text-sm text-muted-foreground">Total Transactions</p>
-              <p className="text-2xl font-extrabold text-foreground mt-1" style={{ fontFamily: "'DM Mono', monospace" }}>{totalTransactionsCount}</p>
-              <Badge variant="info">Completed</Badge>
-            </div>
-            <div className="bg-card rounded-2xl border border-border p-5 text-center">
-              <p className="text-sm text-muted-foreground">Total Revenue</p>
-              <p className="text-2xl font-extrabold text-foreground mt-1" style={{ fontFamily: "'DM Mono', monospace" }}>{peso(totalRevenue)}</p>
-              <Badge variant="success">Recorded</Badge>
-            </div>
-          </div>
-
-          {/* Global Timeframe Selector & Key Trend Stats */}
-          <div className="bg-card rounded-2xl border border-border p-5 shadow-sm space-y-4">
-            <div className="flex items-center justify-between flex-wrap gap-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <TrendingUp size={18} className="text-emerald-600" />
-                  <h3 className="font-extrabold text-foreground text-lg">Revenue Performance & Analytics</h3>
-                </div>
-                <p className="text-muted-foreground text-xs mt-0.5">Live chronological sales velocity and period metrics</p>
-              </div>
-
-              {/* Timeframe Controls */}
-              <div className="flex bg-muted p-1 rounded-xl">
-                {(["7d", "30d", "monthly"] as const).map(r => (
-                  <button
-                    key={r}
-                    onClick={() => setTrendRange(r)}
-                    className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${trendRange === r ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-                  >
-                    {r === "7d" ? "Last 7 Days" : r === "30d" ? "Last 30 Days" : "Monthly (Year)"}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Quick Metrics Bar */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-muted/40 rounded-xl border border-border text-xs">
-              <div>
-                <span className="text-muted-foreground font-medium">Period Revenue:</span>
-                <p className="text-sm font-extrabold text-foreground mt-0.5" style={{ fontFamily: "'DM Mono', monospace" }}>{peso(trendTotal)}</p>
-              </div>
-              <div>
-                <span className="text-muted-foreground font-medium">Daily Average:</span>
-                <p className="text-sm font-extrabold text-emerald-600 mt-0.5" style={{ fontFamily: "'DM Mono', monospace" }}>{peso(avgDailyRevenue)}</p>
-              </div>
-              <div>
-                <span className="text-muted-foreground font-medium">Peak Performance:</span>
-                <p className="text-sm font-extrabold text-blue-600 mt-0.5" style={{ fontFamily: "'DM Mono', monospace" }}>
-                  {peakDay.value > 0 ? `${peso(peakDay.value)} (${peakDay.label})` : "₱0.00"}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Two Split Charts: Bar Graph & Area Graph */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* 1. Bar Chart Card */}
-            <div className="bg-card rounded-2xl border border-border p-5 shadow-sm space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <BarChart3 size={17} className="text-emerald-600" />
-                    <h3 className="font-extrabold text-foreground text-base">Revenue Breakdown</h3>
-                  </div>
-                  <p className="text-muted-foreground text-xs mt-0.5">Discrete sales totals per interval</p>
-                </div>
-                <Badge variant="success">Bar Chart</Badge>
-              </div>
-              <div className="pt-2">
-                <SimpleBarChart data={trendChartData} height={230} color="#10b981" />
-              </div>
-            </div>
-
-            {/* 2. Area Chart Card */}
-            <div className="bg-card rounded-2xl border border-border p-5 shadow-sm space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <TrendingUp size={17} className="text-emerald-600" />
-                    <h3 className="font-extrabold text-foreground text-base">Revenue Trendline</h3>
-                  </div>
-                  <p className="text-muted-foreground text-xs mt-0.5">Continuous sales velocity and trajectory</p>
-                </div>
-                <Badge variant="info">Area Chart</Badge>
-              </div>
-              <div className="pt-2">
-                <SimpleLineChart data={trendChartData} height={230} color="#059669" />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-card rounded-2xl border border-border p-5">
-            <h3 className="font-bold text-foreground mb-4">Recent Sales Transactions</h3>
-            {transactions.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">No completed sales transactions yet.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-border text-xs text-muted-foreground font-semibold uppercase">
-                      <th className="py-2.5 px-3">Receipt #</th>
-                      <th className="py-2.5 px-3">Customer</th>
-                      <th className="py-2.5 px-3">Cashier</th>
-                      <th className="py-2.5 px-3 text-right">Amount</th>
-                      <th className="py-2.5 px-3 text-right">Date</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border text-sm">
-                    {transactions.map(t => (
-                      <tr key={t.id} className="hover:bg-muted/20 transition-colors">
-                        <td className="py-2.5 px-3 font-bold" style={{ fontFamily: "'DM Mono', monospace" }}>{t.receipt_no || `TRX-${t.id}`}</td>
-                        <td className="py-2.5 px-3">{t.customer || "Walk-in"}</td>
-                        <td className="py-2.5 px-3">{t.cashier || "Staff"}</td>
-                        <td className="py-2.5 px-3 text-right font-extrabold text-emerald-600" style={{ fontFamily: "'DM Mono', monospace" }}>{peso(Number(t.total_amount))}</td>
-                        <td className="py-2.5 px-3 text-right text-muted-foreground text-xs">{t.date ? new Date(t.date).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "Today"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {tab === "inventory" && (
-        <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-card rounded-2xl border border-border p-4 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-emerald-50 rounded-xl text-emerald-600 border border-emerald-100">
-                <Package size={20} />
-              </div>
-              <div>
-                <h3 className="font-bold text-foreground text-sm">Inventory Overview</h3>
-                <p className="text-xs text-muted-foreground">
-                  Showing {filteredInventory.length} of {products.length} products
-                  {selectedInventoryCat !== "All" && ` in ${selectedInventoryCat}`}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <label className="text-xs font-semibold text-muted-foreground whitespace-nowrap flex items-center gap-1.5">
-                <Filter size={14} className="text-emerald-600" />
-                Category:
-              </label>
-              <select
-                value={selectedInventoryCat}
-                onChange={(e) => setSelectedInventoryCat(e.target.value)}
-                className="w-full sm:w-64 px-3.5 py-2 bg-background border border-border rounded-xl text-sm font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all cursor-pointer shadow-sm"
-              >
-                <option value="All">All Categories ({products.length} products)</option>
-                {inventoryCategories.map((cat) => {
-                  const count = products.filter(p => p.category === cat).length;
-                  return (
-                    <option key={cat} value={cat}>
-                      {cat} ({count})
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
-          </div>
-
-          <div className="bg-card rounded-2xl border border-border overflow-hidden shadow-sm">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border bg-muted/40">
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Product</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Category</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Price</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Stock</th>
-                  <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {filteredInventory.map(p => (
-                  <tr key={p.id} className="hover:bg-muted/20 transition-colors">
-                    <td className="px-4 py-3 text-sm font-medium text-foreground">{p.name}</td>
-                    <td className="px-4 py-3"><span className={`px-2 py-0.5 rounded-md text-xs font-semibold ${CAT_COLORS[p.category] ?? "bg-gray-100 text-gray-700"}`}>{p.category}</span></td>
-                    <td className="px-4 py-3 text-right text-sm font-semibold" style={{ fontFamily: "'DM Mono', monospace" }}>{peso(p.price)}</td>
-                    <td className="px-4 py-3 text-right text-sm font-bold" style={{ fontFamily: "'DM Mono', monospace", color: p.lowStock ? "#ef4444" : "#0f172a" }}>{p.stock}</td>
-                    <td className="px-4 py-3 text-center">{p.lowStock ? <Badge variant="danger">Low Stock</Badge> : <Badge variant="success">OK</Badge>}</td>
-                  </tr>
-                ))}
-                {filteredInventory.length === 0 && (
-                  <tr>
-                    <td colSpan={5} className="text-center py-8 text-sm text-muted-foreground">
-                      No products found in category "{selectedInventoryCat}".
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {tab === "customers" && (
-        <div className="bg-card rounded-2xl border border-border p-5">
-          <h3 className="font-bold text-foreground mb-4">Registered Customer Report</h3>
-          {registeredCustomers.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-6">No registered customer accounts yet.</p>
-          ) : (
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="text-left py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Customer</th>
-                  <th className="text-left py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Phone</th>
-                  <th className="text-right py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Total Purchases</th>
-                  <th className="text-right py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Joined Date</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {registeredCustomers.map(c => (
-                  <tr key={c.id} className="hover:bg-muted/20 transition-colors">
-                    <td className="py-3">
-                      <p className="text-sm font-semibold text-foreground">{c.full_name}</p>
-                      <p className="text-xs text-muted-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>Code: {c.customer_code || c.username}</p>
-                    </td>
-                    <td className="py-3 text-sm text-muted-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{c.phone}</td>
-                    <td className="py-3 text-right text-sm font-bold text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{c.total_purchases || 0}</td>
-                    <td className="py-3 text-right text-sm text-muted-foreground">{c.joined ? new Date(c.joined).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "N/A"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ─── POS ──────────────────────────────────────────────────────────────────────
 
@@ -3494,17 +3256,12 @@ function POSPage({ products, categories = CATEGORIES }: { products: Product[]; c
   const completeTransaction = async () => {
     try {
       const apiItems = cart.map(i => ({ product_id: i.product.id, quantity: i.qty }));
-      let resTrx: any = null;
-      try {
-        resTrx = await api.transactions.create({
-          customer_id: linkedCustomer ? linkedCustomer.id : null,
-          cashier_id: getSavedUser()?.id || 1,
-          cash_tendered: cash,
-          items: apiItems,
-        });
-      } catch (e) {
-        console.warn("Backend transaction save error, fallback to local display:", e);
-      }
+      const resTrx: any = await api.transactions.create({
+        customer_id: linkedCustomer ? linkedCustomer.id : null,
+        cashier_id: getSavedUser()?.id || 1,
+        cash_tendered: cash,
+        items: apiItems,
+      });
 
       const trx: Transaction = {
         id: resTrx?.receipt_no || `TRX-2026-${Math.floor(Math.random() * 9000) + 1000}`,
@@ -5878,7 +5635,7 @@ function AdminLayout({ onLogout }: { onLogout: () => void }) {
       case "sales": return <AdminSalesPage />;
       case "staff": return <AdminStaffPage />;
       case "customers": return <CustomersPage />;
-      case "reports": return <ReportsPage products={products} />;
+      case "reports": return <ReportsPage />;
       case "settings": return <AdminSettingsPage />;
     }
   };
