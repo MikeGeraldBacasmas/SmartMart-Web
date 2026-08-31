@@ -1,7 +1,7 @@
 /// <reference path="../vite-env.d.ts" />
 import { useState, useMemo, useCallback, createContext, useContext, useEffect } from "react";
 import { Toaster, toast } from "sonner";
-import { api, getSavedUser, UserPayload, RegisteredCustomer, CustomerProfileData, DashboardSummary, TransactionItem, StaffItem } from "../api";
+import { api, getSavedUser, UserPayload, RegisteredCustomer, CustomerProfileData, StaffProfileData, DashboardSummary, TransactionItem, StaffItem } from "../api";
 import logoImg from "../assets/SmartMart_Logo.jpg";
 import ReportsPage from "./components/reports/ReportsPage";
 import {
@@ -3555,9 +3555,10 @@ function StaffDashboard({ onNavigate, products = [] }: { onNavigate: (p: StaffPa
     return todayTransactions.length > 0 ? todaySales / todayTransactions.length : 0;
   }, [todayTransactions, todaySales]);
 
-  // Recent transactions to show (prefer today's, fallback to all recent)
+  // Recent transactions to show (prefer today's, limited to 5)
   const displayTransactions = useMemo(() => {
-    return todayTransactions.length > 0 ? todayTransactions : transactions.slice(0, 8);
+    const list = todayTransactions.length > 0 ? todayTransactions : transactions;
+    return list.slice(0, 5);
   }, [todayTransactions, transactions]);
 
   const handleOpenReceipt = async (t: TransactionItem) => {
@@ -5104,7 +5105,18 @@ function CustomerProfile() {
 // ─── Staff Profile Page ───────────────────────────────────────────────────────
 
 function StaffProfile() {
-  const user = getSavedUser();
+  const savedUser = getSavedUser();
+  const [profile, setProfile] = useState<StaffProfileData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Edit Mode state
+  const [editing, setEditing] = useState(false);
+  const [fullName, setFullName] = useState(savedUser?.name || "Staff");
+  const [username, setUsername] = useState(savedUser?.username || "");
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileMsg, setProfileMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // Password state
   const [showAllPw, setShowAllPw] = useState(false);
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
@@ -5114,6 +5126,84 @@ function StaffProfile() {
   const [submitting, setSubmitting] = useState(false);
 
   const toggleAllPw = () => setShowAllPw(v => !v);
+
+  // Fetch live profile from backend stored procedure
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const data = await api.staff.getMyProfile();
+        if (mounted && data) {
+          setProfile(data);
+          setFullName(data.full_name);
+          setUsername(data.username);
+        }
+      } catch (err: any) {
+        console.warn("Could not fetch live staff profile:", err);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
+
+  const handleStartEditing = () => {
+    setProfileMsg(null);
+    setFullName(profile?.full_name || savedUser?.name || "");
+    setUsername(profile?.username || savedUser?.username || "");
+    setEditing(true);
+  };
+
+  const handleCancelEditing = () => {
+    setProfileMsg(null);
+    setFullName(profile?.full_name || savedUser?.name || "");
+    setUsername(profile?.username || savedUser?.username || "");
+    setEditing(false);
+  };
+
+  const handleSaveProfile = async () => {
+    setProfileMsg(null);
+
+    if (!fullName.trim()) {
+      setProfileMsg({ type: "error", text: "Full Name is required." });
+      return;
+    }
+    if (!username.trim()) {
+      setProfileMsg({ type: "error", text: "Username is required." });
+      return;
+    }
+
+    setSavingProfile(true);
+    try {
+      const res = await api.staff.updateMyProfile({
+        full_name: fullName.trim(),
+        username: username.trim(),
+      });
+
+      const updated = res.profile;
+      setProfile(updated);
+      setFullName(updated.full_name);
+      setUsername(updated.username);
+
+      // Update local storage user session
+      if (savedUser) {
+        const updatedUser: UserPayload = {
+          ...savedUser,
+          name: updated.full_name,
+          username: updated.username,
+        };
+        localStorage.setItem("smartmart_user", JSON.stringify(updatedUser));
+      }
+
+      setProfileMsg({ type: "success", text: "Staff information and credentials updated successfully!" });
+      toast.success("Profile updated successfully!");
+      setEditing(false);
+    } catch (err: any) {
+      setProfileMsg({ type: "error", text: err.message || "Failed to update profile." });
+    } finally {
+      setSavingProfile(false);
+    }
+  };
 
   const handleChangePassword = async () => {
     setErrorMsg("");
@@ -5128,6 +5218,7 @@ function StaffProfile() {
     try {
       await api.auth.changePassword(currentPw, newPw);
       setSuccessMsg("Password updated successfully!");
+      toast.success("Password changed successfully!");
       setCurrentPw(""); setNewPw(""); setConfirmPw("");
     } catch (err: any) {
       setErrorMsg(err.message || "Failed to update password.");
@@ -5154,61 +5245,148 @@ function StaffProfile() {
     </div>
   );
 
-  const displayName = user?.name || "Staff";
-  const displayUsername = user?.username || "";
-  const staffCode = user?.staff_code || `STF${String(user?.id || 1).padStart(3, "0")}`;
-  const joinedDate = user?.joined || "Aug 05, 2026";
+  const displayName = profile?.full_name || savedUser?.name || "Staff";
+  const displayUsername = profile?.username || savedUser?.username || "";
+  const staffCode = profile?.staff_code || savedUser?.staff_code || `STF${String(savedUser?.id || 1).padStart(3, "0")}`;
+  const joinedDate = profile?.joined || savedUser?.joined || "Aug 05, 2026";
+  const roleName = profile?.role || "Cashier";
+  const statusName = profile?.status || "Active";
 
   return (
-    <div className="p-6 space-y-5">
-      <h1 className="text-2xl font-extrabold text-foreground">My Profile</h1>
+    <div className="p-6 space-y-5 max-w-2xl">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-extrabold text-foreground">My Profile</h1>
+          <p className="text-muted-foreground text-sm">Manage staff account information and security</p>
+        </div>
+        {!editing && (
+          <button
+            onClick={handleStartEditing}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-bold rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 transition-all shadow-sm"
+          >
+            <Pencil size={15} /> Edit Profile
+          </button>
+        )}
+      </div>
 
-      {/* Info card */}
-      <div className="bg-card rounded-2xl border border-border p-6">
-        <div className="flex items-center gap-5 mb-6">
-          <div className="w-16 h-16 rounded-2xl bg-emerald-100 flex items-center justify-center shrink-0">
-            <span className="text-emerald-700 font-extrabold text-3xl">{displayName.charAt(0)}</span>
-          </div>
-          <div>
-            <h2 className="text-xl font-extrabold text-foreground">{displayName}</h2>
-            <p className="text-sm text-muted-foreground font-mono mt-0.5">{staffCode}</p>
-            <div className="mt-1">
-              <Badge variant="success">Active</Badge>
+      {profileMsg && (
+        <div className={`p-4 rounded-xl border text-sm font-semibold flex items-center gap-2.5 ${profileMsg.type === "success" ? "bg-emerald-50 border-emerald-200 text-emerald-800" : "bg-red-50 border-red-200 text-red-700"}`}>
+          {profileMsg.type === "success" ? <CheckCircle size={18} className="text-emerald-600 shrink-0" /> : <AlertTriangle size={18} className="text-red-500 shrink-0" />}
+          <span>{profileMsg.text}</span>
+        </div>
+      )}
+
+      {/* Info / Edit Card */}
+      <div className="bg-card rounded-2xl border border-border p-6 shadow-sm">
+        {editing ? (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-border">
+              <h3 className="font-extrabold text-foreground text-base flex items-center gap-2">
+                <Pencil size={16} className="text-emerald-600" /> Edit Staff Information
+              </h3>
+              <span className="text-xs font-mono font-bold text-muted-foreground bg-muted px-2.5 py-1 rounded-lg">{staffCode}</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Full Name</label>
+                <input
+                  value={fullName}
+                  onChange={e => setFullName(e.target.value)}
+                  placeholder="e.g. Misa Amane"
+                  className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-sm font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Username (Login)</label>
+                <input
+                  value={username}
+                  onChange={e => setUsername(e.target.value)}
+                  placeholder="e.g. cashier1"
+                  className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-sm font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 pt-2 border-t border-border/60">
+              <div>
+                <p className="text-xs text-muted-foreground font-medium">Role</p>
+                <p className="font-semibold text-foreground text-sm mt-0.5">{roleName}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground font-medium">Staff Code</p>
+                <p className="font-semibold text-foreground text-sm font-mono mt-0.5">{staffCode}</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 pt-3">
+              <button
+                onClick={handleSaveProfile}
+                disabled={savingProfile}
+                className="px-5 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 transition-all disabled:opacity-50 flex items-center gap-2"
+              >
+                {savingProfile && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+                <span>{savingProfile ? "Saving Changes..." : "Save Changes"}</span>
+              </button>
+              <button
+                onClick={handleCancelEditing}
+                disabled={savingProfile}
+                className="px-4 py-2.5 bg-muted text-foreground rounded-xl text-sm font-semibold hover:bg-muted/80 transition-colors"
+              >
+                Cancel
+              </button>
             </div>
           </div>
-        </div>
-        <div className="grid grid-cols-2 gap-6 pt-2 border-t border-border">
-          <div>
-            <p className="text-xs text-muted-foreground font-medium">Username</p>
-            <p className="font-semibold text-foreground text-sm mt-1">{displayUsername}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground font-medium">Role</p>
-            <p className="font-semibold text-foreground text-sm mt-1">Cashier</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground font-medium">Status</p>
-            <p className="font-semibold text-foreground text-sm mt-1">Active</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground font-medium">Joined</p>
-            <p className="font-semibold text-foreground text-sm mt-1">{joinedDate}</p>
-          </div>
-        </div>
+        ) : (
+          <>
+            <div className="flex items-center gap-5 mb-6">
+              <div className="w-16 h-16 rounded-2xl bg-emerald-100 flex items-center justify-center shrink-0">
+                <span className="text-emerald-700 font-extrabold text-3xl">{displayName.charAt(0)}</span>
+              </div>
+              <div>
+                <h2 className="text-xl font-extrabold text-foreground">{displayName}</h2>
+                <p className="text-sm text-muted-foreground font-mono mt-0.5">{staffCode}</p>
+                <div className="mt-1">
+                  <Badge variant="success">{statusName}</Badge>
+                </div>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-6 pt-2 border-t border-border">
+              <div>
+                <p className="text-xs text-muted-foreground font-medium">Username</p>
+                <p className="font-semibold text-foreground text-sm mt-1">{displayUsername}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground font-medium">Role</p>
+                <p className="font-semibold text-foreground text-sm mt-1">{roleName}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground font-medium">Status</p>
+                <p className="font-semibold text-foreground text-sm mt-1">{statusName}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground font-medium">Joined</p>
+                <p className="font-semibold text-foreground text-sm mt-1">{joinedDate}</p>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Change password */}
-      <div className="bg-card rounded-2xl border border-border p-6 space-y-4">
-        <h3 className="font-extrabold text-foreground">Change Password</h3>
+      <div className="bg-card rounded-2xl border border-border p-6 space-y-4 shadow-sm">
+        <h3 className="font-extrabold text-foreground text-base">Change Password</h3>
 
         {errorMsg && (
-          <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs font-semibold">
-            {errorMsg}
+          <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs font-semibold flex items-center gap-2">
+            <AlertTriangle size={15} className="shrink-0" />
+            <span>{errorMsg}</span>
           </div>
         )}
         {successMsg && (
-          <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl text-xs font-semibold">
-            {successMsg}
+          <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl text-xs font-semibold flex items-center gap-2">
+            <CheckCircle size={15} className="shrink-0" />
+            <span>{successMsg}</span>
           </div>
         )}
 
@@ -5218,9 +5396,10 @@ function StaffProfile() {
         <button
           onClick={handleChangePassword}
           disabled={submitting}
-          className="px-4 py-2.5 bg-[#0f172a] text-white rounded-xl text-sm font-bold hover:bg-[#1e293b] transition-colors disabled:opacity-50"
+          className="px-5 py-2.5 bg-[#0f172a] text-white rounded-xl text-sm font-bold hover:bg-[#1e293b] transition-colors disabled:opacity-50 flex items-center gap-2"
         >
-          {submitting ? "Updating..." : "Update Password"}
+          {submitting && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+          <span>{submitting ? "Updating..." : "Update Password"}</span>
         </button>
       </div>
     </div>
