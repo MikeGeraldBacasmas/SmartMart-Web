@@ -198,6 +198,8 @@ export const api = {
   // Products
   products: {
     getAll: (): Promise<ProductItem[]> => request<ProductItem[]>("/products"),
+    getPublic: (): Promise<ProductItem[]> => request<ProductItem[]>("/products/public"),
+    getBestSellers: (limit: number = 8): Promise<any[]> => request<any[]>(`/products/best-sellers?limit=${limit}`),
     getLowStock: (): Promise<ProductItem[]> => request<ProductItem[]>("/products/low-stock"),
     create: (data: { name: string; category_id: number; price: number; stock: number }): Promise<ProductItem> =>
       request("/products", {
@@ -321,4 +323,216 @@ export const api = {
         body: JSON.stringify(settings),
       }),
   },
+
+  // Reports & Analytics
+  reports: {
+    getSummary: (from?: string, to?: string, prevFrom?: string, prevTo?: string): Promise<ReportsSummaryResponse> => {
+      const params = new URLSearchParams();
+      if (from) params.append("from", from);
+      if (to) params.append("to", to);
+      if (prevFrom) params.append("prevFrom", prevFrom);
+      if (prevTo) params.append("prevTo", prevTo);
+      const query = params.toString() ? `?${params.toString()}` : "";
+      return request<ReportsSummaryResponse>(`/reports/summary${query}`);
+    },
+
+    getSalesOverview: (from?: string, to?: string, groupBy: "daily" | "weekly" | "monthly" | "yearly" = "daily"): Promise<SalesOverviewPoint[]> => {
+      const params = new URLSearchParams();
+      if (from) params.append("from", from);
+      if (to) params.append("to", to);
+      if (groupBy) params.append("groupBy", groupBy);
+      const query = params.toString() ? `?${params.toString()}` : "";
+      return request<SalesOverviewPoint[]>(`/reports/sales-overview${query}`);
+    },
+
+    getSalesByCategory: (from?: string, to?: string): Promise<CategorySalesReport> => {
+      const params = new URLSearchParams();
+      if (from) params.append("from", from);
+      if (to) params.append("to", to);
+      const query = params.toString() ? `?${params.toString()}` : "";
+      return request<CategorySalesReport>(`/reports/sales-by-category${query}`);
+    },
+
+    getBestSellers: (from?: string, to?: string, sortBy: "quantity" | "revenue" = "quantity", limit = 20): Promise<BestSellerReportItem[]> => {
+      const params = new URLSearchParams();
+      if (from) params.append("from", from);
+      if (to) params.append("to", to);
+      if (sortBy) params.append("sortBy", sortBy);
+      if (limit) params.append("limit", String(limit));
+      const query = params.toString() ? `?${params.toString()}` : "";
+      return request<BestSellerReportItem[]>(`/reports/best-sellers${query}`);
+    },
+
+    getInventoryStatus: (): Promise<InventoryStatusReport> => {
+      return request<InventoryStatusReport>("/reports/inventory-status");
+    },
+
+    getCustomerActivity: (from?: string, to?: string): Promise<CustomerActivityReport> => {
+      const params = new URLSearchParams();
+      if (from) params.append("from", from);
+      if (to) params.append("to", to);
+      const query = params.toString() ? `?${params.toString()}` : "";
+      return request<CustomerActivityReport>(`/reports/customer-activity${query}`);
+    },
+
+    getStaffPerformance: (from?: string, to?: string): Promise<StaffPerformanceItem[]> => {
+      const params = new URLSearchParams();
+      if (from) params.append("from", from);
+      if (to) params.append("to", to);
+      const query = params.toString() ? `?${params.toString()}` : "";
+      return request<StaffPerformanceItem[]>(`/reports/staff-performance${query}`);
+    },
+
+    getPaymentMethods: (from?: string, to?: string): Promise<PaymentMethodsReport> => {
+      const params = new URLSearchParams();
+      if (from) params.append("from", from);
+      if (to) params.append("to", to);
+      const query = params.toString() ? `?${params.toString()}` : "";
+      return request<PaymentMethodsReport>(`/reports/payment-methods${query}`);
+    },
+
+    getTransactions: (filters?: { from?: string; to?: string; search?: string; payment_method?: string; staff_id?: number }): Promise<ReportTransactionItem[]> => {
+      const params = new URLSearchParams();
+      if (filters?.from) params.append("from", filters.from);
+      if (filters?.to) params.append("to", filters.to);
+      if (filters?.search) params.append("search", filters.search);
+      if (filters?.payment_method) params.append("payment_method", filters.payment_method);
+      if (filters?.staff_id) params.append("staff_id", String(filters.staff_id));
+      const query = params.toString() ? `?${params.toString()}` : "";
+      return request<ReportTransactionItem[]>(`/reports/transactions${query}`);
+    },
+  },
 };
+
+export interface ReportPeriodStats {
+  total_sales: number;
+  total_transactions: number;
+  products_sold: number;
+  customers_served: number;
+  registered_customers_served: number;
+}
+
+export interface ReportsSummaryResponse {
+  period: { from: string; to: string; prevFrom: string; prevTo: string };
+  current: ReportPeriodStats;
+  previous: ReportPeriodStats;
+  growth: {
+    sales_pct: number;
+    transactions_pct: number;
+    products_sold_pct: number;
+    customers_served_pct: number;
+  };
+}
+
+export interface SalesOverviewPoint {
+  label: string;
+  raw_date: string;
+  total_sales: number;
+  total_transactions: number;
+}
+
+export interface CategorySalesItem {
+  category: string;
+  items_sold: number;
+  revenue: number;
+  percentage: number;
+}
+
+export interface CategorySalesReport {
+  total_revenue: number;
+  categories: CategorySalesItem[];
+}
+
+export interface BestSellerReportItem {
+  id: number;
+  name: string;
+  category: string;
+  image_url?: string | null;
+  price: number;
+  stock: number;
+  low_stock_threshold: number;
+  quantity_sold: number;
+  total_revenue: number;
+}
+
+export interface InventoryStatusItem {
+  id: number;
+  name: string;
+  category: string;
+  price: number;
+  stock: number;
+  low_stock_threshold: number;
+  status: "In Stock" | "Low Stock" | "Out of Stock";
+}
+
+export interface InventoryStatusReport {
+  summary: {
+    total_products: number;
+    in_stock: number;
+    low_stock: number;
+    out_of_stock: number;
+  };
+  products: InventoryStatusItem[];
+}
+
+export interface TopCustomerItem {
+  id: number;
+  customer_code: string;
+  name: string;
+  phone: string;
+  transactions_count: number;
+  items_purchased: number;
+  total_spent: number;
+  last_purchase_date: string;
+}
+
+export interface CustomerActivityReport {
+  summary: {
+    total_registered: number;
+    purchased_in_period: number;
+    returning_customers: number;
+    new_customers: number;
+  };
+  top_customers: TopCustomerItem[];
+}
+
+export interface StaffPerformanceItem {
+  id: number;
+  staff_code: string;
+  name: string;
+  role: string;
+  status: string;
+  transactions_count: number;
+  total_sales: number;
+  avg_transaction_value: number;
+  last_transaction: string;
+}
+
+export interface PaymentMethodItem {
+  method: string;
+  transactions_count: number;
+  total_amount: number;
+  percentage: number;
+}
+
+export interface PaymentMethodsReport {
+  overall_total: number;
+  methods: PaymentMethodItem[];
+}
+
+export interface ReportTransactionItem {
+  id: number;
+  receipt_no: string;
+  customer: string;
+  customer_code?: string | null;
+  cashier: string;
+  staff_code: string;
+  items_count: number;
+  total_amount: number;
+  cash_tendered: number;
+  change_amount: number;
+  payment_method: string;
+  status: string;
+  date: string;
+  raw_created_at: string;
+}

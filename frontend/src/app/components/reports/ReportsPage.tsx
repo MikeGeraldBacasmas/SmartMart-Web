@@ -1,0 +1,1888 @@
+import React, { useState, useEffect, useMemo, useCallback } from "react";
+import {
+  TrendingUp, TrendingDown, ShoppingBag, Receipt, Users, Calendar,
+  Download, Printer, FileSpreadsheet, FileText, Search, Filter,
+  RefreshCw, CheckCircle2, AlertCircle, Eye, X, ArrowUpRight,
+  ArrowDownRight, Package, UserCheck, ShieldCheck, CreditCard,
+  Building2, Sparkles, ChevronDown, BarChart2, PieChart as PieChartIcon
+} from "lucide-react";
+import {
+  ResponsiveContainer, AreaChart, Area, BarChart, Bar, PieChart, Pie,
+  Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend
+} from "recharts";
+import { toast } from "sonner";
+import {
+  api,
+  ReportsSummaryResponse,
+  SalesOverviewPoint,
+  CategorySalesReport,
+  BestSellerReportItem,
+  CustomerActivityReport,
+  StaffPerformanceItem,
+  PaymentMethodsReport,
+  ReportTransactionItem,
+} from "../../../api";
+import logoImg from "../../../assets/SmartMart_Logo.jpg";
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const peso = (n: number | string) =>
+  `₱${Number(n || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+const formatCompactNumber = (n: number) => {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+  return n.toLocaleString();
+};
+
+const formatDateStr = (d: Date): string => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+type PresetRange = "today" | "yesterday" | "this_week" | "this_month" | "last_month" | "this_year" | "custom";
+
+const CATEGORY_COLORS = [
+  "#10b981", "#3b82f6", "#8b5cf6", "#f59e0b", "#ec4899",
+  "#06b6d4", "#f97316", "#14b8a6", "#6366f1", "#84cc16",
+  "#e11d48", "#64748b", "#d97706", "#0284c7", "#9333ea"
+];
+
+const PAYMENT_METHOD_CONFIG: Record<string, { label: string; bg: string; text: string; iconBg: string }> = {
+  Cash: { label: "Cash (Walk-in)", bg: "bg-emerald-50", text: "text-emerald-700 border-emerald-200", iconBg: "bg-emerald-500" },
+};
+
+// ─── Custom Tooltips ──────────────────────────────────────────────────────────
+
+const CustomOverviewTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    return (
+      <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-xl text-xs space-y-1.5 min-w-[160px]">
+        <p className="font-extrabold text-gray-800 border-b border-gray-100 pb-1">{label || data.label}</p>
+        <div className="flex items-center justify-between text-emerald-600 font-bold">
+          <span>Sales:</span>
+          <span className="font-mono">{peso(data.total_sales)}</span>
+        </div>
+        <div className="flex items-center justify-between text-blue-600 font-medium">
+          <span>Transactions:</span>
+          <span className="font-mono">{data.total_transactions} trx</span>
+        </div>
+      </div>
+    );
+  }
+  return null;
+};
+
+const CustomPieTooltip = ({ active, payload }: any) => {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    return (
+      <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-xl text-xs space-y-1">
+        <p className="font-extrabold text-gray-800">{data.category}</p>
+        <p className="text-emerald-600 font-mono font-bold">{peso(data.revenue)}</p>
+        <p className="text-gray-500">{data.items_sold} items ({data.percentage}%)</p>
+      </div>
+    );
+  }
+  return null;
+};
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
+export default function ReportsPage() {
+  // Date range state
+  const [preset, setPreset] = useState<PresetRange>("this_month");
+  const [fromDate, setFromDate] = useState<string>(() => {
+    const d = new Date();
+    return formatDateStr(new Date(d.getFullYear(), d.getMonth(), 1));
+  });
+  const [toDate, setToDate] = useState<string>(() => formatDateStr(new Date()));
+  const [appliedDates, setAppliedDates] = useState<{ from: string; to: string }>({
+    from: formatDateStr(new Date(new Date().getFullYear(), new Date().getMonth(), 1)),
+    to: formatDateStr(new Date()),
+  });
+
+  // Granularity for overview chart
+  const [overviewGroupBy, setOverviewGroupBy] = useState<"daily" | "weekly" | "monthly" | "yearly">("daily");
+
+  // Sorting and filtering state
+  const [bestSellerSort, setBestSellerSort] = useState<"quantity" | "revenue">("revenue");
+  const [txSearch, setTxSearch] = useState("");
+  const [txPaymentFilter, setTxPaymentFilter] = useState("All");
+
+  // Data states
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [loadingOverview, setLoadingOverview] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [summary, setSummary] = useState<ReportsSummaryResponse | null>(null);
+  const [salesOverview, setSalesOverview] = useState<SalesOverviewPoint[]>([]);
+  const [categorySales, setCategorySales] = useState<CategorySalesReport | null>(null);
+  const [bestSellers, setBestSellers] = useState<BestSellerReportItem[]>([]);
+  const [customerActivity, setCustomerActivity] = useState<CustomerActivityReport | null>(null);
+  const [staffPerformance, setStaffPerformance] = useState<StaffPerformanceItem[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethodsReport | null>(null);
+  const [transactions, setTransactions] = useState<ReportTransactionItem[]>([]);
+
+  // Client-side sort for best sellers
+  const sortedBestSellers = useMemo(() => {
+    return [...bestSellers].sort((a, b) => {
+      if (bestSellerSort === "revenue") {
+        return b.total_revenue - a.total_revenue || b.quantity_sold - a.quantity_sold;
+      }
+      return b.quantity_sold - a.quantity_sold || b.total_revenue - a.total_revenue;
+    });
+  }, [bestSellers, bestSellerSort]);
+
+  // Receipt Modal State
+  const [selectedReceipt, setSelectedReceipt] = useState<ReportTransactionItem | null>(null);
+  const [receiptItems, setReceiptItems] = useState<Array<{ product_name: string; quantity: number; unit_price: number; subtotal: number }>>([]);
+  const [loadingReceiptItems, setLoadingReceiptItems] = useState(false);
+
+  // Export dropdown
+  const [showExportMenu, setShowExportMenu] = useState(false);
+
+  // Calculate preset dates
+  const handleSelectPreset = (p: PresetRange) => {
+    setPreset(p);
+    const now = new Date();
+    let f = new Date();
+    let t = new Date();
+
+    if (p === "today") {
+      f = new Date(now);
+      t = new Date(now);
+    } else if (p === "yesterday") {
+      f = new Date(now);
+      f.setDate(f.getDate() - 1);
+      t = new Date(f);
+    } else if (p === "this_week") {
+      const day = now.getDay();
+      const diff = (day + 6) % 7; // Monday as 0
+      f = new Date(now.getFullYear(), now.getMonth(), now.getDate() - diff);
+      t = new Date(f.getTime() + 6 * 24 * 60 * 60 * 1000);
+    } else if (p === "this_month") {
+      f = new Date(now.getFullYear(), now.getMonth(), 1);
+      t = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    } else if (p === "last_month") {
+      f = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      t = new Date(now.getFullYear(), now.getMonth(), 0);
+    } else if (p === "this_year") {
+      f = new Date(now.getFullYear(), 0, 1);
+      t = new Date(now.getFullYear(), 11, 31);
+    }
+
+    if (p !== "custom") {
+      const fromStr = formatDateStr(f);
+      const toStr = formatDateStr(t);
+      setFromDate(fromStr);
+      setToDate(toStr);
+      setAppliedDates({ from: fromStr, to: toStr });
+    }
+  };
+
+  const handleApplyCustomFilter = () => {
+    if (!fromDate || !toDate) {
+      toast.error("Please specify both From and To dates.");
+      return;
+    }
+    if (new Date(fromDate) > new Date(toDate)) {
+      toast.error("'From' date cannot be after 'To' date.");
+      return;
+    }
+    setAppliedDates({ from: fromDate, to: toDate });
+    toast.success("Date filter applied!");
+  };
+
+  const handleResetFilter = () => {
+    handleSelectPreset("this_month");
+    setTxSearch("");
+    setTxPaymentFilter("All");
+    setBestSellerSort("revenue");
+    toast.info("Report filters reset to This Month.");
+  };
+
+  // Fetch all reports data based on applied dates
+  const loadReportsData = useCallback(async (isInitial = false) => {
+    if (isInitial) setInitialLoading(true);
+    else setIsRefreshing(true);
+    setError(null);
+    try {
+      const { from, to } = appliedDates;
+      const [
+        sumRes,
+        overviewRes,
+        catRes,
+        bestRes,
+        custRes,
+        staffRes,
+        payRes,
+        txRes,
+      ] = await Promise.all([
+        api.reports.getSummary(from, to),
+        api.reports.getSalesOverview(from, to, overviewGroupBy),
+        api.reports.getSalesByCategory(from, to),
+        api.reports.getBestSellers(from, to, "revenue", 50),
+        api.reports.getCustomerActivity(from, to),
+        api.reports.getStaffPerformance(from, to),
+        api.reports.getPaymentMethods(from, to),
+        api.reports.getTransactions({ from, to }),
+      ]);
+
+      setSummary(sumRes);
+      setSalesOverview(overviewRes);
+      setCategorySales(catRes);
+      setBestSellers(bestRes);
+      setCustomerActivity(custRes);
+      setStaffPerformance(staffRes);
+      setPaymentMethods(payRes);
+      setTransactions(txRes);
+    } catch (err: any) {
+      console.error("Failed to load reports data:", err);
+      setError(err.message || "Unable to load report data. Please try again.");
+    } finally {
+      setInitialLoading(false);
+      setIsRefreshing(false);
+    }
+  }, [appliedDates]);
+
+  useEffect(() => {
+    loadReportsData(true);
+  }, [appliedDates]);
+
+  // Dedicated effect for overview chart granularity switch
+  const isFirstMount = React.useRef(true);
+  useEffect(() => {
+    if (isFirstMount.current) {
+      isFirstMount.current = false;
+      return;
+    }
+    let active = true;
+    (async () => {
+      setLoadingOverview(true);
+      try {
+        const overviewRes = await api.reports.getSalesOverview(appliedDates.from, appliedDates.to, overviewGroupBy);
+        if (active) setSalesOverview(overviewRes);
+      } catch (err) {
+        console.error("Failed to update sales overview:", err);
+      } finally {
+        if (active) setLoadingOverview(false);
+      }
+    })();
+    return () => { active = false; };
+  }, [overviewGroupBy]);
+
+  // Open receipt details
+  const handleOpenReceipt = async (tx: ReportTransactionItem) => {
+    setSelectedReceipt(tx);
+    setLoadingReceiptItems(true);
+    try {
+      const items: any = await api.transactions.getItems(tx.id);
+      setReceiptItems(
+        items.map((i: any) => ({
+          product_name: i.product_name,
+          quantity: Number(i.quantity),
+          unit_price: Number(i.unit_price),
+          subtotal: Number(i.subtotal),
+        }))
+      );
+    } catch (err) {
+      console.error("Failed to load receipt items:", err);
+      setReceiptItems([]);
+    } finally {
+      setLoadingReceiptItems(false);
+    }
+  };
+
+  // Filtered transactions list
+  const displayedTransactions = useMemo(() => {
+    let result = transactions;
+    if (txPaymentFilter !== "All") {
+      result = result.filter(t => t.payment_method === txPaymentFilter);
+    }
+    if (txSearch.trim()) {
+      const q = txSearch.toLowerCase().trim();
+      result = result.filter(
+        t =>
+          (t.receipt_no && t.receipt_no.toLowerCase().includes(q)) ||
+          (t.customer && t.customer.toLowerCase().includes(q)) ||
+          (t.cashier && t.cashier.toLowerCase().includes(q)) ||
+          (t.customer_code && t.customer_code.toLowerCase().includes(q)) ||
+          (t.staff_code && t.staff_code.toLowerCase().includes(q))
+      );
+    }
+    return result;
+  }, [transactions, txPaymentFilter, txSearch]);
+
+  // Export handlers
+  const handleExportCSV = () => {
+    if (!summary) return;
+    const { from, to } = appliedDates;
+    const nowStr = new Date().toLocaleString();
+
+    let csv = `SmartMart - Reports & Analytics Export\n`;
+    csv += `Date Range: ${from} to ${to}\n`;
+    csv += `Generated On: ${nowStr}\n\n`;
+
+    csv += `--- SUMMARY STATISTICS ---\n`;
+    csv += `Total Sales,${summary.current.total_sales}\n`;
+    csv += `Total Transactions,${summary.current.total_transactions}\n`;
+    csv += `Products Sold,${summary.current.products_sold}\n`;
+    csv += `Customers Served,${summary.current.customers_served}\n\n`;
+
+    csv += `--- CATEGORY SALES ---\n`;
+    csv += `Category,Items Sold,Revenue,Percentage\n`;
+    categorySales?.categories.forEach(c => {
+      csv += `"${c.category}",${c.items_sold},${c.revenue},${c.percentage}%\n`;
+    });
+    csv += `\n`;
+
+    csv += `--- BEST SELLING PRODUCTS ---\n`;
+    csv += `Product,Category,Price,Quantity Sold,Total Revenue,Current Stock\n`;
+    bestSellers.forEach(p => {
+      csv += `"${p.name.replace(/"/g, '""')}","${p.category}",${p.price},${p.quantity_sold},${p.total_revenue},${p.stock}\n`;
+    });
+    csv += `\n`;
+
+    csv += `--- TRANSACTION HISTORY ---\n`;
+    csv += `Receipt No,Date,Customer,Cashier,Items,Total Amount,Payment Method,Status\n`;
+    displayedTransactions.forEach(t => {
+      csv += `"${t.receipt_no}","${t.date}","${t.customer.replace(/"/g, '""')}","${t.cashier.replace(/"/g, '""')}",${t.items_count},${t.total_amount},"${t.payment_method}","${t.status}"\n`;
+    });
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `SmartMart_Report_${from}_to_${to}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    setShowExportMenu(false);
+    toast.success("CSV Report downloaded successfully!");
+  };
+
+  const handleExportPrint = () => {
+    setShowExportMenu(false);
+    if (!summary) {
+      toast.error("Report data is still loading.");
+      return;
+    }
+
+    const { from, to } = appliedDates;
+    const nowStr = new Date().toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    const categoryRows = (categorySales?.categories || [])
+      .map(
+        c => `
+        <tr>
+          <td>${c.category}</td>
+          <td class="text-center font-mono">${c.items_sold}</td>
+          <td class="text-right font-mono font-bold">₱${c.revenue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+          <td class="text-right font-mono">${c.percentage}%</td>
+        </tr>`
+      )
+      .join("");
+
+    const bestSellerRows = sortedBestSellers
+      .slice(0, 15)
+      .map(
+        (p, idx) => `
+        <tr>
+          <td class="text-center font-mono font-bold text-muted">#${idx + 1}</td>
+          <td class="font-bold">${p.name}</td>
+          <td>${p.category}</td>
+          <td class="text-right font-mono">₱${p.price.toFixed(2)}</td>
+          <td class="text-center font-mono font-bold">${p.quantity_sold}</td>
+          <td class="text-right font-mono font-bold">₱${p.total_revenue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+        </tr>`
+      )
+      .join("");
+
+    const staffRows = staffPerformance
+      .map(
+        s => `
+        <tr>
+          <td class="font-bold">${s.name} <span class="text-muted font-mono">(${s.staff_code})</span></td>
+          <td>${s.role}</td>
+          <td class="text-center font-mono">${s.transactions_count}</td>
+          <td class="text-right font-mono font-bold">₱${s.total_sales.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+          <td class="text-right font-mono">₱${s.avg_transaction_value.toFixed(2)}</td>
+        </tr>`
+      )
+      .join("");
+
+    const recentTxRows = transactions
+      .slice(0, 20)
+      .map(
+        t => `
+        <tr>
+          <td class="font-mono font-bold text-primary">${t.receipt_no}</td>
+          <td class="font-mono text-sm">${t.date}</td>
+          <td>${t.customer}</td>
+          <td>${t.cashier}</td>
+          <td class="text-center font-mono">${t.items_count}</td>
+          <td class="text-right font-mono font-bold">₱${t.total_amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+          <td class="text-center"><span class="badge">Cash (Walk-in)</span></td>
+          <td class="text-center">${t.status}</td>
+        </tr>`
+      )
+      .join("");
+
+    const printHtml = `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <title>SmartMart Executive Sales & Operations Report (${from} to ${to})</title>
+        <style>
+          @page {
+            size: A4 portrait;
+            margin: 12mm 15mm;
+          }
+          * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+          }
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+            color: #1f2937;
+            background: #ffffff;
+            font-size: 9pt;
+            line-height: 1.4;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          .header {
+            border-bottom: 2.5px solid #059669;
+            padding-bottom: 12px;
+            margin-bottom: 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+          }
+          .logo-area h1 {
+            font-size: 20pt;
+            font-weight: 900;
+            color: #065f46;
+            letter-spacing: -0.5px;
+            line-height: 1.1;
+          }
+          .logo-area p {
+            font-size: 8.5pt;
+            color: #4b5563;
+            margin-top: 3px;
+          }
+          .meta-area {
+            text-align: right;
+          }
+          .meta-area h2 {
+            font-size: 12pt;
+            font-weight: 800;
+            color: #111827;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+          }
+          .meta-info {
+            font-size: 8.5pt;
+            color: #4b5563;
+            margin-top: 4px;
+            line-height: 1.5;
+          }
+          .kpi-container {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-bottom: 16px;
+          }
+          .kpi-box {
+            border: 1.5px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 10px 12px;
+            background: #f9fafb;
+          }
+          .kpi-title {
+            font-size: 7.5pt;
+            font-weight: 700;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+          }
+          .kpi-value {
+            font-size: 13pt;
+            font-weight: 900;
+            color: #065f46;
+            font-family: "Courier New", Courier, monospace;
+            margin-top: 3px;
+          }
+          .kpi-sub {
+            font-size: 7.5pt;
+            color: #059669;
+            font-weight: 600;
+            margin-top: 2px;
+          }
+          .section {
+            margin-bottom: 16px;
+            page-break-inside: avoid;
+          }
+          .section-heading {
+            font-size: 9pt;
+            font-weight: 800;
+            color: #065f46;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 1.5px solid #d1fae5;
+            padding-bottom: 4px;
+            margin-bottom: 8px;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 8pt;
+          }
+          th {
+            background: #f3f4f6;
+            color: #374151;
+            font-weight: 700;
+            text-transform: uppercase;
+            font-size: 7.5pt;
+            letter-spacing: 0.3px;
+            padding: 5px 8px;
+            border-top: 1px solid #d1d5db;
+            border-bottom: 1.5px solid #9ca3af;
+            text-align: left;
+          }
+          td {
+            padding: 4.5px 8px;
+            border-bottom: 1px solid #e5e7eb;
+            color: #1f2937;
+          }
+          tr:nth-child(even) td {
+            background: #fafafa;
+          }
+          .text-right { text-align: right; }
+          .text-center { text-align: center; }
+          .font-mono { font-family: "Courier New", Courier, monospace; }
+          .font-bold { font-weight: 700; }
+          .text-muted { color: #6b7280; }
+          .text-primary { color: #0284c7; }
+          .badge {
+            background: #ecfdf5;
+            color: #047857;
+            font-weight: 700;
+            font-size: 7pt;
+            padding: 2px 6px;
+            border-radius: 4px;
+            border: 1px solid #a7f3d0;
+          }
+          .two-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+          }
+          .sign-area {
+            margin-top: 24px;
+            padding-top: 12px;
+            display: flex;
+            justify-content: space-between;
+            page-break-inside: avoid;
+          }
+          .sign-box {
+            width: 42%;
+            text-align: center;
+          }
+          .sign-line {
+            border-top: 1px solid #374151;
+            margin-top: 36px;
+            padding-top: 5px;
+            font-size: 8.5pt;
+            font-weight: 700;
+            color: #111827;
+          }
+          .sign-role {
+            font-size: 7.5pt;
+            color: #6b7280;
+          }
+          .footer {
+            margin-top: 18px;
+            border-top: 1px solid #e5e7eb;
+            padding-top: 6px;
+            font-size: 7pt;
+            color: #9ca3af;
+            display: flex;
+            justify-content: space-between;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div class="logo-area">
+            <h1>SMARTMART</h1>
+            <p><strong>SmartMart Supermarket POS System</strong></p>
+            <p>Zamora, Bilar, Bohol • Tel: 09704972414</p>
+          </div>
+          <div class="meta-area">
+            <h2>Sales & Operations Report</h2>
+            <div class="meta-info">
+              <div><strong>Period:</strong> ${from} &nbsp;to&nbsp; ${to}</div>
+              <div><strong>Generated:</strong> ${nowStr}</div>
+              <div><strong>Channel:</strong> Physical In-Store POS (Walk-in Cash Only)</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="kpi-container">
+          <div class="kpi-box">
+            <div class="kpi-title">Total Gross Sales</div>
+            <div class="kpi-value">₱${summary.current.total_sales.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            <div class="kpi-sub">${summary.growth.sales_pct >= 0 ? "+" : ""}${summary.growth.sales_pct}% vs prev period</div>
+          </div>
+          <div class="kpi-box">
+            <div class="kpi-title">POS Transactions</div>
+            <div class="kpi-value">${summary.current.total_transactions.toLocaleString()}</div>
+            <div class="kpi-sub">${summary.growth.transactions_pct >= 0 ? "+" : ""}${summary.growth.transactions_pct}% vs prev period</div>
+          </div>
+          <div class="kpi-box">
+            <div class="kpi-title">Products Sold</div>
+            <div class="kpi-value">${summary.current.products_sold.toLocaleString()} <span style="font-size:7.5pt;color:#6b7280">items</span></div>
+            <div class="kpi-sub">${summary.growth.products_sold_pct >= 0 ? "+" : ""}${summary.growth.products_sold_pct}% vs prev period</div>
+          </div>
+          <div class="kpi-box">
+            <div class="kpi-title">Customers Served</div>
+            <div class="kpi-value">${summary.current.customers_served.toLocaleString()}</div>
+            <div class="kpi-sub">100% Cash Settled</div>
+          </div>
+        </div>
+
+        <div class="two-col">
+          <div class="section">
+            <div class="section-heading">Sales by Product Category</div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Category</th>
+                  <th class="text-center">Units</th>
+                  <th class="text-right">Revenue</th>
+                  <th class="text-right">Share</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${categoryRows || '<tr><td colspan="4" class="text-center text-muted">No category sales recorded</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="section">
+            <div class="section-heading">Staff Cashier Throughput</div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Cashier</th>
+                  <th>Role</th>
+                  <th class="text-center">Trx</th>
+                  <th class="text-right">Processed</th>
+                  <th class="text-right">Avg Trx</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${staffRows || '<tr><td colspan="5" class="text-center text-muted">No staff activity recorded</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-heading">Top Best-Selling Products</div>
+          <table>
+            <thead>
+              <tr>
+                <th class="text-center" style="width:36px">Rank</th>
+                <th>Product Name</th>
+                <th>Category</th>
+                <th class="text-right">Unit Price</th>
+                <th class="text-center">Qty Sold</th>
+                <th class="text-right">Total Revenue</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${bestSellerRows || '<tr><td colspan="6" class="text-center text-muted">No product sales recorded</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="section">
+          <div class="section-heading">Recent In-Store POS Transactions (Sample Log)</div>
+          <table>
+            <thead>
+              <tr>
+                <th>Receipt No.</th>
+                <th>Date & Time</th>
+                <th>Customer</th>
+                <th>Cashier</th>
+                <th class="text-center">Items</th>
+                <th class="text-right">Total Amount</th>
+                <th class="text-center">Payment</th>
+                <th class="text-center">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${recentTxRows || '<tr><td colspan="8" class="text-center text-muted">No transactions recorded</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="sign-area">
+          <div class="sign-box">
+            <div class="sign-line">Prepared by: Store Cashier Supervisor / Admin</div>
+            <div class="sign-role">Date: ________________________</div>
+          </div>
+          <div class="sign-box">
+            <div class="sign-line">Approved by: Store Operations Manager</div>
+            <div class="sign-role">Date: ________________________</div>
+          </div>
+        </div>
+
+        <div class="footer">
+          <span>SmartMart POS Executive Reporting Engine • Internal Confidential Report</span>
+          <span>Report Generated on ${nowStr}</span>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const printWin = window.open("", "_blank", "width=950,height=800");
+    if (printWin) {
+      printWin.document.write(printHtml);
+      printWin.document.close();
+      printWin.focus();
+      setTimeout(() => {
+        printWin.print();
+        printWin.close();
+      }, 400);
+      toast.success("Executive PDF / Print document opened!");
+    } else {
+      toast.error("Please allow popups to print report.");
+    }
+  };
+
+  const handlePrintReceipt = () => {
+    if (!selectedReceipt) return;
+
+    const itemRows = receiptItems
+      .map(
+        i => `
+        <tr>
+          <td>${i.product_name}</td>
+          <td class="text-center">${i.quantity}</td>
+          <td class="text-right font-mono">₱${i.unit_price.toFixed(2)}</td>
+          <td class="text-right font-mono">₱${i.subtotal.toFixed(2)}</td>
+        </tr>`
+      )
+      .join("");
+
+    const receiptHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <title>Receipt - ${selectedReceipt.receipt_no}</title>
+        <style>
+          @page {
+            size: 80mm auto;
+            margin: 4mm;
+          }
+          * { box-sizing: border-box; margin: 0; padding: 0; }
+          body {
+            font-family: "Courier New", Courier, monospace;
+            font-size: 9pt;
+            color: #000;
+            width: 72mm;
+            margin: 0 auto;
+            line-height: 1.3;
+          }
+          .header { text-align: center; margin-bottom: 8px; }
+          .header h2 { font-size: 13pt; font-weight: bold; margin-bottom: 2px; }
+          .divider { border-top: 1px dashed #000; margin: 6px 0; }
+          .meta { font-size: 8.5pt; margin-bottom: 6px; }
+          table { width: 100%; border-collapse: collapse; font-size: 8.5pt; margin: 6px 0; }
+          th { border-bottom: 1px dashed #000; padding: 3px 0; text-align: left; }
+          td { padding: 2px 0; }
+          .text-right { text-align: right; }
+          .text-center { text-align: center; }
+          .totals { font-size: 9pt; margin-top: 4px; }
+          .totals-row { display: flex; justify-content: space-between; margin: 2px 0; }
+          .grand-total { font-size: 11pt; font-weight: bold; }
+          .footer { text-align: center; margin-top: 12px; font-size: 8pt; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h2>SMARTMART</h2>
+          <p>Zamora, Bilar, Bohol</p>
+          <p>Tel: 09704972414</p>
+        </div>
+        <div class="divider"></div>
+        <div class="meta">
+          <p>Receipt No : ${selectedReceipt.receipt_no}</p>
+          <p>Date & Time: ${selectedReceipt.date}</p>
+          <p>Customer   : ${selectedReceipt.customer}</p>
+          <p>Cashier    : ${selectedReceipt.cashier} (${selectedReceipt.staff_code})</p>
+        </div>
+        <div class="divider"></div>
+        <table>
+          <thead>
+            <tr>
+              <th>ITEM</th>
+              <th class="text-center">QTY</th>
+              <th class="text-right">PRICE</th>
+              <th class="text-right">TOTAL</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemRows}
+          </tbody>
+        </table>
+        <div class="divider"></div>
+        <div class="totals">
+          <div class="totals-row"><span>Subtotal:</span><span>₱${selectedReceipt.total_amount.toFixed(2)}</span></div>
+          <div class="totals-row"><span>Discount:</span><span>₱0.00</span></div>
+          <div class="totals-row grand-total"><span>TOTAL:</span><span>₱${selectedReceipt.total_amount.toFixed(2)}</span></div>
+          <div class="totals-row"><span>Cash Tendered:</span><span>₱${selectedReceipt.cash_tendered.toFixed(2)}</span></div>
+          <div class="totals-row"><span>Change:</span><span>₱${selectedReceipt.change_amount.toFixed(2)}</span></div>
+          <div class="totals-row"><span>Payment Method:</span><span>Cash (Walk-in)</span></div>
+          <div class="totals-row"><span>Status:</span><span>${selectedReceipt.status}</span></div>
+        </div>
+        <div class="divider"></div>
+        <div class="footer">
+          <p>THANK YOU FOR SHOPPING</p>
+          <p>AT SMARTMART!</p>
+          <p style="margin-top:4px;">Please keep this receipt for returns</p>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const win = window.open("", "_blank", "width=450,height=600");
+    if (win) {
+      win.document.write(receiptHtml);
+      win.document.close();
+      win.focus();
+      setTimeout(() => {
+        win.print();
+        win.close();
+      }, 350);
+    }
+  };
+
+  const handleDownloadReceipt = () => {
+    if (!selectedReceipt) return;
+    let txt = `========================================\n`;
+    txt += `               SMARTMART                \n`;
+    txt += `          Zamora, Bilar, Bohol          \n`;
+    txt += `       Contact: 09704972414             \n`;
+    txt += `========================================\n`;
+    txt += `Receipt No: ${selectedReceipt.receipt_no}\n`;
+    txt += `Date & Time: ${selectedReceipt.date}\n`;
+    txt += `Customer: ${selectedReceipt.customer}\n`;
+    txt += `Cashier: ${selectedReceipt.cashier} (${selectedReceipt.staff_code})\n`;
+    txt += `----------------------------------------\n`;
+    txt += `ITEM                     QTY   PRICE   SUBTOTAL\n`;
+    receiptItems.forEach(item => {
+      const name = item.product_name.padEnd(23, " ").slice(0, 23);
+      const qty = String(item.quantity).padStart(3, " ");
+      const price = Number(item.unit_price).toFixed(2).padStart(7, " ");
+      const sub = Number(item.subtotal).toFixed(2).padStart(8, " ");
+      txt += `${name} ${qty} ${price} ${sub}\n`;
+    });
+    txt += `----------------------------------------\n`;
+    txt += `Subtotal:                  ${peso(selectedReceipt.total_amount)}\n`;
+    txt += `Discount:                  ₱0.00\n`;
+    txt += `TOTAL:                     ${peso(selectedReceipt.total_amount)}\n`;
+    txt += `Cash Tendered:             ${peso(selectedReceipt.cash_tendered)}\n`;
+    txt += `Change:                    ${peso(selectedReceipt.change_amount)}\n`;
+    txt += `Payment Method:            ${selectedReceipt.payment_method}\n`;
+    txt += `Status:                    ${selectedReceipt.status}\n`;
+    txt += `========================================\n`;
+    txt += `     Thank you for shopping at SmartMart!   \n`;
+    txt += `========================================\n`;
+
+    const blob = new Blob([txt], { type: "text/plain;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `Receipt_${selectedReceipt.receipt_no}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast.success("Receipt downloaded!");
+  };
+
+  return (
+    <div className="p-4 sm:p-6 lg:p-8 space-y-7 bg-[#f9fafb] min-h-full font-sans text-gray-800">
+      
+      {/* ─── 1. PAGE HEADER ─────────────────────────────────────────────────── */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200 pb-5">
+        <div>
+          <div className="flex items-center gap-2.5">
+            <div className="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center text-white shadow-md shadow-emerald-500/20">
+              <TrendingUp size={22} />
+            </div>
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-[#111827] tracking-tight">
+                Reports & Analytics
+              </h1>
+              <p className="text-xs sm:text-sm text-gray-500 font-medium">
+                Monitor SmartMart's in-store sales, POS transactions, customer purchases, and staff activity.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Date / Actions Bar */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="px-3.5 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-600 shadow-sm flex items-center gap-2">
+            <Calendar size={14} className="text-emerald-600" />
+            <span>Today: {new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })}</span>
+          </div>
+
+          {/* Export Report Menu */}
+          <div className="relative">
+            <button
+              onClick={() => setShowExportMenu(!showExportMenu)}
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-xs sm:text-sm font-bold rounded-xl hover:bg-emerald-700 transition-all shadow-sm shadow-emerald-600/20"
+            >
+              <Download size={16} /> Export Report <ChevronDown size={14} />
+            </button>
+
+            {showExportMenu && (
+              <div className="absolute right-0 mt-2 w-48 bg-white rounded-2xl border border-gray-200 shadow-2xl z-30 p-1.5 space-y-1">
+                <button
+                  onClick={handleExportPrint}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 rounded-xl transition-colors text-left"
+                >
+                  <Printer size={15} /> Export as PDF / Print
+                </button>
+                <button
+                  onClick={handleExportCSV}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 rounded-xl transition-colors text-left"
+                >
+                  <FileSpreadsheet size={15} /> Export as CSV / Excel
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ─── 3. DATE RANGE FILTER BAR ───────────────────────────────────────── */}
+      <div className="bg-white rounded-2xl border border-gray-200 p-4 sm:p-5 shadow-sm space-y-4">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          
+          {/* Preset Buttons */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-2 lg:pb-0 scrollbar-hide">
+            {([
+              ["today", "Today"],
+              ["yesterday", "Yesterday"],
+              ["this_week", "This Week"],
+              ["this_month", "This Month"],
+              ["last_month", "Last Month"],
+              ["this_year", "This Year"],
+              ["custom", "Custom Date Range"],
+            ] as [PresetRange, string][]).map(([val, lbl]) => (
+              <button
+                key={val}
+                onClick={() => handleSelectPreset(val)}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+                  preset === val
+                    ? "bg-emerald-600 text-white shadow-sm shadow-emerald-600/20"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900"
+                }`}
+              >
+                {lbl}
+              </button>
+            ))}
+          </div>
+
+          {/* Active Period Label */}
+          <div className="text-xs font-semibold text-gray-500 flex items-center gap-1.5 self-end lg:self-auto">
+            <span>Filtered Period:</span>
+            <span className="font-extrabold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 flex items-center gap-1.5">
+              {isRefreshing && <RefreshCw size={11} className="animate-spin text-emerald-600" />}
+              {appliedDates.from} &nbsp;→&nbsp; {appliedDates.to}
+            </span>
+          </div>
+        </div>
+
+        {/* Custom Range Picker Controls */}
+        {preset === "custom" && (
+          <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-gray-100">
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-bold text-gray-500">From:</label>
+              <input
+                type="date"
+                value={fromDate}
+                onChange={e => setFromDate(e.target.value)}
+                className="px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-bold text-gray-500">To:</label>
+              <input
+                type="date"
+                value={toDate}
+                onChange={e => setToDate(e.target.value)}
+                className="px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleApplyCustomFilter}
+                className="px-4 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 transition-all shadow-sm"
+              >
+                Apply Filter
+              </button>
+              <button
+                onClick={handleResetFilter}
+                className="px-3 py-1.5 bg-gray-100 text-gray-600 text-xs font-bold rounded-xl hover:bg-gray-200 transition-colors"
+              >
+                Reset
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ─── LOADING / ERROR STATES ────────────────────────────────────────── */}
+      {initialLoading && !summary ? (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[1, 2, 3, 4].map(i => (
+              <div key={i} className="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm animate-pulse space-y-3">
+                <div className="w-10 h-10 bg-gray-200 rounded-xl"></div>
+                <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+                <div className="h-7 bg-gray-200 rounded w-3/4"></div>
+              </div>
+            ))}
+          </div>
+          <div className="h-72 bg-white rounded-2xl border border-gray-200 p-6 animate-pulse"></div>
+        </div>
+      ) : error && !summary ? (
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-8 text-center space-y-3">
+          <AlertCircle size={36} className="text-red-500 mx-auto" />
+          <h3 className="text-base font-extrabold text-red-800">Unable to load report data</h3>
+          <p className="text-xs text-red-600 max-w-md mx-auto">{error}</p>
+          <button
+            onClick={() => loadReportsData(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white text-xs font-bold rounded-xl hover:bg-red-700 transition-colors"
+          >
+            <RefreshCw size={14} /> Retry
+          </button>
+        </div>
+      ) : (
+        <>
+          {/* ─── 2. SALES SUMMARY CARDS ─────────────────────────────────────── */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            
+            {/* Card 1: Total Sales */}
+            <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                  <TrendingUp size={22} />
+                </div>
+                {summary?.growth.sales_pct !== undefined && (
+                  <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full ${
+                    summary.growth.sales_pct >= 0 ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-red-50 text-red-700 border border-red-200"
+                  }`}>
+                    {summary.growth.sales_pct >= 0 ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}
+                    {Math.abs(summary.growth.sales_pct)}% vs prev
+                  </span>
+                )}
+              </div>
+              <div className="mt-4">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Total Sales</p>
+                <p className="text-2xl sm:text-3xl font-extrabold text-[#111827] mt-1 font-mono tracking-tight">
+                  {peso(summary?.current.total_sales || 0)}
+                </p>
+                <p className="text-[11px] text-gray-400 mt-1">From completed in-store POS sales</p>
+              </div>
+            </div>
+
+            {/* Card 2: Total Transactions */}
+            <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                  <Receipt size={22} />
+                </div>
+                {summary?.growth.transactions_pct !== undefined && (
+                  <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full ${
+                    summary.growth.transactions_pct >= 0 ? "bg-blue-50 text-blue-700 border border-blue-200" : "bg-red-50 text-red-700 border border-red-200"
+                  }`}>
+                    {summary.growth.transactions_pct >= 0 ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}
+                    {Math.abs(summary.growth.transactions_pct)}%
+                  </span>
+                )}
+              </div>
+              <div className="mt-4">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Total Transactions</p>
+                <p className="text-2xl sm:text-3xl font-extrabold text-[#111827] mt-1 font-mono tracking-tight">
+                  {(summary?.current.total_transactions || 0).toLocaleString()} <span className="text-xs text-gray-400 font-sans font-semibold">Trx</span>
+                </p>
+                <p className="text-[11px] text-gray-400 mt-1">Completed cashier checkouts</p>
+              </div>
+            </div>
+
+            {/* Card 3: Products Sold */}
+            <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <div className="w-11 h-11 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
+                  <ShoppingBag size={22} />
+                </div>
+                {summary?.growth.products_sold_pct !== undefined && (
+                  <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full ${
+                    summary.growth.products_sold_pct >= 0 ? "bg-purple-50 text-purple-700 border border-purple-200" : "bg-red-50 text-red-700 border border-red-200"
+                  }`}>
+                    {summary.growth.products_sold_pct >= 0 ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}
+                    {Math.abs(summary.growth.products_sold_pct)}%
+                  </span>
+                )}
+              </div>
+              <div className="mt-4">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Products Sold</p>
+                <p className="text-2xl sm:text-3xl font-extrabold text-[#111827] mt-1 font-mono tracking-tight">
+                  {(summary?.current.products_sold || 0).toLocaleString()} <span className="text-xs text-gray-400 font-sans font-semibold">Items</span>
+                </p>
+                <p className="text-[11px] text-gray-400 mt-1">Total item quantity dispensed</p>
+              </div>
+            </div>
+
+            {/* Card 4: Customers Served */}
+            <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+                  <Users size={22} />
+                </div>
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                  {summary?.current.registered_customers_served || 0} Registered
+                </span>
+              </div>
+              <div className="mt-4">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Customers Served</p>
+                <p className="text-2xl sm:text-3xl font-extrabold text-[#111827] mt-1 font-mono tracking-tight">
+                  {(summary?.current.customers_served || 0).toLocaleString()} <span className="text-xs text-gray-400 font-sans font-semibold">Customers</span>
+                </p>
+                <p className="text-[11px] text-gray-400 mt-1">Unique shoppers in period</p>
+              </div>
+            </div>
+          </div>
+
+          {/* ─── 4. SALES OVERVIEW (LARGE INTERACTIVE CHART) ──────────────────── */}
+          <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <BarChart2 size={20} className="text-emerald-600" />
+                  <h2 className="text-lg font-extrabold text-[#111827]">In-Store Sales Overview</h2>
+                </div>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Actual completed physical POS transactions over time
+                </p>
+              </div>
+
+              {/* Granularity switch */}
+              <div className="flex bg-gray-100 p-1 rounded-xl self-start sm:self-auto">
+                {(["daily", "weekly", "monthly", "yearly"] as const).map(g => (
+                  <button
+                    key={g}
+                    onClick={() => setOverviewGroupBy(g)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize transition-all ${
+                      overviewGroupBy === g
+                        ? "bg-white text-emerald-700 shadow-sm"
+                        : "text-gray-500 hover:text-gray-800"
+                    }`}
+                  >
+                    {g}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Chart Canvas */}
+            <div className={`w-full h-80 pt-2 relative transition-opacity duration-200 ${loadingOverview ? "opacity-40" : "opacity-100"}`}>
+              {loadingOverview && (
+                <div className="absolute inset-0 flex items-center justify-center z-10">
+                  <div className="flex items-center gap-2 px-3 py-1.5 bg-white/90 shadow-md border border-gray-200 rounded-xl text-xs font-bold text-gray-700">
+                    <RefreshCw size={13} className="animate-spin text-emerald-600" />
+                    Updating chart...
+                  </div>
+                </div>
+              )}
+              {salesOverview.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-gray-400 text-xs">
+                  <Receipt size={32} className="mb-2 text-gray-300" />
+                  <p>No transaction data available for the selected period.</p>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={salesOverview} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="salesGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                    <XAxis
+                      dataKey="label"
+                      tick={{ fontSize: 11, fill: "#9ca3af" }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 11, fill: "#9ca3af" }}
+                      axisLine={false}
+                      tickLine={false}
+                      tickFormatter={v => `₱${formatCompactNumber(v)}`}
+                    />
+                    <Tooltip content={<CustomOverviewTooltip />} />
+                    <Area
+                      type="monotone"
+                      dataKey="total_sales"
+                      stroke="#10b981"
+                      strokeWidth={3}
+                      fillOpacity={1}
+                      fill="url(#salesGrad)"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </div>
+
+          {/* ─── 5 & 11. SALES BY CATEGORY & PAYMENT METHODS ─────────────────── */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            {/* 5. Sales by Category (2 cols) */}
+            <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-200 p-5 sm:p-6 shadow-sm space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <PieChartIcon size={20} className="text-emerald-600" />
+                    <h2 className="text-lg font-extrabold text-[#111827]">Sales by Category</h2>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-0.5">Revenue distribution across product lines</p>
+                </div>
+                <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 font-mono">
+                  {peso(categorySales?.total_revenue || 0)} Total
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+                {/* Donut Chart */}
+                <div className="h-64 w-full flex items-center justify-center">
+                  {!categorySales?.categories.length ? (
+                    <p className="text-xs text-gray-400">No category sales in period.</p>
+                  ) : (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={categorySales.categories}
+                          dataKey="revenue"
+                          nameKey="category"
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={60}
+                          outerRadius={95}
+                          paddingAngle={3}
+                        >
+                          {categorySales.categories.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={CATEGORY_COLORS[index % CATEGORY_COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip content={<CustomPieTooltip />} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  )}
+                </div>
+
+                {/* Table Breakdown */}
+                <div className="max-h-64 overflow-y-auto space-y-2 pr-1 divide-y divide-gray-100">
+                  {!categorySales?.categories.length ? (
+                    <p className="text-xs text-gray-400">No categories found.</p>
+                  ) : (
+                    categorySales.categories.map((c, i) => (
+                      <div key={c.category} className="pt-2 first:pt-0 flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span
+                            className="w-3 h-3 rounded-md shrink-0"
+                            style={{ backgroundColor: CATEGORY_COLORS[i % CATEGORY_COLORS.length] }}
+                          />
+                          <span className="font-bold text-gray-800 truncate">{c.category}</span>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="font-extrabold text-gray-900 font-mono">{peso(c.revenue)}</p>
+                          <p className="text-[10px] text-gray-400">{c.items_sold} items • {c.percentage}%</p>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* 11. In-Store Payment (Cash Only) (1 col) */}
+            <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6 shadow-sm space-y-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <CreditCard size={20} className="text-emerald-600" />
+                  <h2 className="text-lg font-extrabold text-[#111827]">In-Store Payment</h2>
+                </div>
+                <p className="text-xs text-gray-400 mt-0.5">Physical walk-in POS transactions (Cash Only)</p>
+              </div>
+
+              <div className="space-y-3">
+                <div className="p-4 rounded-xl border bg-emerald-50 text-emerald-800 border-emerald-200 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                      <span className="font-extrabold text-xs text-emerald-900">Cash Tendered</span>
+                    </div>
+                    <span className="text-sm font-mono font-extrabold text-emerald-700">
+                      {peso(paymentMethods?.overall_total || summary?.current.total_sales || 0)}
+                    </span>
+                  </div>
+
+                  <div className="w-full bg-emerald-200 rounded-full h-2 overflow-hidden">
+                    <div className="h-full rounded-full bg-emerald-500 w-full" />
+                  </div>
+
+                  <div className="flex justify-between text-xs font-semibold text-emerald-800">
+                    <span>{summary?.current.total_transactions || 0} POS Transactions</span>
+                    <span className="font-extrabold">100% In-Store Cash</span>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-gray-50 rounded-xl border border-gray-100 text-[11px] text-gray-500 space-y-1">
+                  <p className="font-bold text-gray-700">Store Payment Policy</p>
+                  <p>All in-store walk-in POS purchases are settled strictly via cash tender.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ─── 6. BEST-SELLING PRODUCTS ────────────────────────────────────── */}
+          <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Package size={20} className="text-emerald-600" />
+                  <h2 className="text-lg font-extrabold text-[#111827]">Best-Selling Products</h2>
+                </div>
+                <p className="text-xs text-gray-400 mt-0.5">Top-performing products ranked by sales</p>
+              </div>
+
+              {/* Sort buttons */}
+              <div className="flex items-center gap-2 bg-gray-100 p-1 rounded-xl text-xs font-bold">
+                <span className="text-gray-400 px-2">Sort by:</span>
+                <button
+                  onClick={() => setBestSellerSort("revenue")}
+                  className={`px-3 py-1.5 rounded-lg transition-all ${
+                    bestSellerSort === "revenue" ? "bg-white text-emerald-700 shadow-sm" : "text-gray-500 hover:text-gray-800"
+                  }`}
+                >
+                  Revenue
+                </button>
+                <button
+                  onClick={() => setBestSellerSort("quantity")}
+                  className={`px-3 py-1.5 rounded-lg transition-all ${
+                    bestSellerSort === "quantity" ? "bg-white text-emerald-700 shadow-sm" : "text-gray-500 hover:text-gray-800"
+                  }`}
+                >
+                  Quantity Sold
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-gray-200 bg-gray-50 text-gray-500 font-extrabold uppercase tracking-wider text-left">
+                    <th className="py-3 px-4">Product</th>
+                    <th className="py-3 px-4">Category</th>
+                    <th className="py-3 px-4 text-right">Unit Price</th>
+                    <th className="py-3 px-4 text-right">Quantity Sold</th>
+                    <th className="py-3 px-4 text-right">Total Revenue</th>
+                    <th className="py-3 px-4 text-center">Current Stock</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {sortedBestSellers.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-gray-400">
+                        No product sales recorded in this period.
+                      </td>
+                    </tr>
+                  ) : (
+                    sortedBestSellers.map((p, idx) => (
+                      <tr key={p.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-3">
+                            <span className="font-mono text-gray-400 font-bold w-4">#{idx + 1}</span>
+                            <div className="w-9 h-9 rounded-lg bg-gray-100 border border-gray-200 overflow-hidden flex items-center justify-center shrink-0">
+                              {p.image_url ? (
+                                <img
+                                  src={`http://localhost:4000${p.image_url}`}
+                                  alt={p.name}
+                                  className="w-full h-full object-cover"
+                                  onError={e => { (e.target as any).style.display = "none"; }}
+                                />
+                              ) : (
+                                <Package size={16} className="text-gray-400" />
+                              )}
+                            </div>
+                            <span className="font-extrabold text-gray-900">{p.name}</span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className="px-2.5 py-1 rounded-lg bg-gray-100 text-gray-700 font-semibold">
+                            {p.category}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono font-medium text-gray-600">
+                          {peso(p.price)}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono font-extrabold text-gray-900">
+                          {p.quantity_sold.toLocaleString()}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono font-extrabold text-emerald-600">
+                          {peso(p.total_revenue)}
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <span className={`px-2 py-0.5 rounded-full font-bold font-mono ${
+                            p.stock <= 0
+                              ? "bg-red-50 text-red-700 border border-red-200"
+                              : p.stock <= p.low_stock_threshold
+                              ? "bg-amber-50 text-amber-700 border border-amber-200"
+                              : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                          }`}>
+                            {p.stock} in stock
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* ─── 8 & 9. CUSTOMER PURCHASE ACTIVITY & TOP CUSTOMERS ───────────── */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            {/* Customer Activity Metrics (1 col) */}
+            <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6 shadow-sm space-y-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <UserCheck size={20} className="text-emerald-600" />
+                  <h2 className="text-lg font-extrabold text-[#111827]">Customer Purchase Activity</h2>
+                </div>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Decoupled from browsing: counts completed POS purchases only
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <div className="p-3.5 bg-gray-50 rounded-xl border border-gray-200 flex justify-between items-center">
+                  <div>
+                    <p className="text-xs font-bold text-gray-500">Total Registered Customers</p>
+                    <p className="text-lg font-extrabold text-gray-900 mt-0.5 font-mono">
+                      {customerActivity?.summary.total_registered || 0}
+                    </p>
+                  </div>
+                  <Users size={20} className="text-gray-400" />
+                </div>
+
+                <div className="p-3.5 bg-emerald-50 rounded-xl border border-emerald-200 flex justify-between items-center">
+                  <div>
+                    <p className="text-xs font-bold text-emerald-800">Customers Who Purchased</p>
+                    <p className="text-lg font-extrabold text-emerald-900 mt-0.5 font-mono">
+                      {customerActivity?.summary.purchased_in_period || 0}
+                    </p>
+                  </div>
+                  <ShoppingBag size={20} className="text-emerald-600" />
+                </div>
+
+                <div className="p-3.5 bg-blue-50 rounded-xl border border-blue-200 flex justify-between items-center">
+                  <div>
+                    <p className="text-xs font-bold text-blue-800">Returning Customers</p>
+                    <p className="text-lg font-extrabold text-blue-900 mt-0.5 font-mono">
+                      {customerActivity?.summary.returning_customers || 0}
+                    </p>
+                  </div>
+                  <CheckCircle2 size={20} className="text-blue-600" />
+                </div>
+
+                <div className="p-3.5 bg-purple-50 rounded-xl border border-purple-200 flex justify-between items-center">
+                  <div>
+                    <p className="text-xs font-bold text-purple-800">New Customers</p>
+                    <p className="text-lg font-extrabold text-purple-900 mt-0.5 font-mono">
+                      {customerActivity?.summary.new_customers || 0}
+                    </p>
+                  </div>
+                  <Sparkles size={20} className="text-purple-600" />
+                </div>
+              </div>
+            </div>
+
+            {/* Top Customers (2 cols) */}
+            <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-200 p-5 sm:p-6 shadow-sm space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Users size={20} className="text-emerald-600" />
+                    <h2 className="text-lg font-extrabold text-[#111827]">Top Customers</h2>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-0.5">Ranked by actual in-store POS transaction spend</p>
+                </div>
+                <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2.5 py-1 rounded-lg">
+                  {customerActivity?.top_customers.length || 0} Customers
+                </span>
+              </div>
+
+              <div className="overflow-x-auto max-h-64">
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 bg-gray-50 border-b border-gray-200">
+                    <tr className="text-gray-500 font-extrabold uppercase tracking-wider text-left">
+                      <th className="py-2.5 px-3">Customer</th>
+                      <th className="py-2.5 px-3 text-center">Transactions</th>
+                      <th className="py-2.5 px-3 text-center">Items Bought</th>
+                      <th className="py-2.5 px-3 text-right">Total Spent</th>
+                      <th className="py-2.5 px-3 text-right">Last Purchase</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {!customerActivity?.top_customers.length ? (
+                      <tr>
+                        <td colSpan={5} className="py-6 text-center text-gray-400">
+                          No customer purchase activity recorded in this period.
+                        </td>
+                      </tr>
+                    ) : (
+                      customerActivity.top_customers.map(c => (
+                        <tr key={c.id} className="hover:bg-gray-50 transition-colors">
+                          <td className="py-2.5 px-3">
+                            <p className="font-extrabold text-gray-900">{c.name}</p>
+                            <p className="text-[10px] text-gray-400 font-mono">{c.customer_code}</p>
+                          </td>
+                          <td className="py-2.5 px-3 text-center font-mono font-bold text-gray-800">
+                            {c.transactions_count}
+                          </td>
+                          <td className="py-2.5 px-3 text-center font-mono text-gray-600">
+                            {c.items_purchased}
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-mono font-extrabold text-emerald-600">
+                            {peso(c.total_spent)}
+                          </td>
+                          <td className="py-2.5 px-3 text-right text-gray-500">
+                            {c.last_purchase_date}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          {/* ─── 10. STAFF POS PERFORMANCE ───────────────────────────────────── */}
+          <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6 shadow-sm space-y-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <ShieldCheck size={20} className="text-emerald-600" />
+                <h2 className="text-lg font-extrabold text-[#111827]">Staff POS Performance</h2>
+              </div>
+              <p className="text-xs text-gray-400 mt-0.5">
+                POS throughput and register activity processed by staff cashiers
+              </p>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-gray-200 bg-gray-50 text-gray-500 font-extrabold uppercase tracking-wider text-left">
+                    <th className="py-3 px-4">Staff Member</th>
+                    <th className="py-3 px-4 text-center">Status</th>
+                    <th className="py-3 px-4 text-center">Transactions Processed</th>
+                    <th className="py-3 px-4 text-right">Sales Processed</th>
+                    <th className="py-3 px-4 text-right">Avg Transaction</th>
+                    <th className="py-3 px-4 text-right">Last Transaction</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {staffPerformance.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-6 text-center text-gray-400">
+                        No staff activity found.
+                      </td>
+                    </tr>
+                  ) : (
+                    staffPerformance.map(s => (
+                      <tr key={s.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="py-3 px-4">
+                          <p className="font-extrabold text-gray-900">{s.name}</p>
+                          <p className="text-[10px] text-gray-400 font-mono">{s.staff_code} • {s.role}</p>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                            s.status === "Active" ? "bg-emerald-100 text-emerald-800" : "bg-gray-100 text-gray-600"
+                          }`}>
+                            {s.status}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-center font-mono font-extrabold text-gray-900">
+                          {s.transactions_count}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono font-extrabold text-emerald-600">
+                          {peso(s.total_sales)}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono font-semibold text-gray-700">
+                          {peso(s.avg_transaction_value)}
+                        </td>
+                        <td className="py-3 px-4 text-right text-gray-500">
+                          {s.last_transaction}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* ─── 12. RECEIPT / TRANSACTION HISTORY ──────────────────────────── */}
+          <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Receipt size={20} className="text-emerald-600" />
+                  <h2 className="text-lg font-extrabold text-[#111827]">Transaction History</h2>
+                </div>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Actual completed in-store POS receipts for the period
+                </p>
+              </div>
+
+              {/* Filters & Search */}
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="relative w-full sm:w-64">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    value={txSearch}
+                    onChange={e => setTxSearch(e.target.value)}
+                    placeholder="Search receipt, customer, staff..."
+                    className="w-full pl-8 pr-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                  />
+                </div>
+
+                <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold shrink-0">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                  Cash Tendered (Walk-in)
+                </div>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-gray-200 bg-gray-50 text-gray-500 font-extrabold uppercase tracking-wider text-left">
+                    <th className="py-3 px-4">Receipt No.</th>
+                    <th className="py-3 px-4">Date & Time</th>
+                    <th className="py-3 px-4">Customer</th>
+                    <th className="py-3 px-4">Cashier</th>
+                    <th className="py-3 px-4 text-center">Items</th>
+                    <th className="py-3 px-4 text-right">Total Amount</th>
+                    <th className="py-3 px-4 text-center">Payment</th>
+                    <th className="py-3 px-4 text-center">Status</th>
+                    <th className="py-3 px-4 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {displayedTransactions.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="py-8 text-center text-gray-400">
+                        No transactions found for the selected filter.
+                      </td>
+                    </tr>
+                  ) : (
+                    displayedTransactions.map(t => (
+                      <tr key={t.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="py-3 px-4 font-mono font-extrabold text-blue-600">
+                          {t.receipt_no}
+                        </td>
+                        <td className="py-3 px-4 text-gray-500 font-mono">
+                          {t.date}
+                        </td>
+                        <td className="py-3 px-4 font-semibold text-gray-900">
+                          {t.customer}
+                        </td>
+                        <td className="py-3 px-4 text-gray-600">
+                          {t.cashier}
+                        </td>
+                        <td className="py-3 px-4 text-center font-mono font-bold text-gray-700">
+                          {t.items_count}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono font-extrabold text-emerald-600">
+                          {peso(t.total_amount)}
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <span className="px-2.5 py-0.5 rounded-full font-bold text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            Cash
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <span className="px-2 py-0.5 rounded-full font-bold text-[10px] bg-emerald-100 text-emerald-800">
+                            {t.status}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <button
+                            onClick={() => handleOpenReceipt(t)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors"
+                          >
+                            <Eye size={12} /> View Receipt
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ─── 13. RECEIPT DETAILS MODAL ─────────────────────────────────────── */}
+      {selectedReceipt && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl border border-gray-200 p-6 sm:p-7 w-full max-w-md shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
+            
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0">
+                  <img src={logoImg} alt="SmartMart" className="w-full h-full object-cover" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-gray-900 text-sm">SmartMart POS Receipt</h3>
+                  <p className="text-[10px] text-gray-400">Official Store Transaction</p>
+                </div>
+              </div>
+              <button
+                onClick={() => { setSelectedReceipt(null); setReceiptItems([]); }}
+                className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Receipt Content */}
+            <div className="space-y-4 text-xs font-mono">
+              <div className="text-center pb-2 border-b border-dashed border-gray-200">
+                <p className="font-extrabold text-base text-gray-900">{selectedReceipt.receipt_no}</p>
+                <p className="text-gray-400 text-[11px] mt-0.5">{selectedReceipt.date}</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-[11px]">
+                <div className="p-2.5 bg-gray-50 rounded-xl">
+                  <span className="text-gray-400 block text-[10px] uppercase font-bold">Customer</span>
+                  <span className="font-extrabold text-gray-800">{selectedReceipt.customer}</span>
+                </div>
+                <div className="p-2.5 bg-gray-50 rounded-xl">
+                  <span className="text-gray-400 block text-[10px] uppercase font-bold">Cashier / Staff</span>
+                  <span className="font-extrabold text-gray-800">{selectedReceipt.cashier}</span>
+                </div>
+              </div>
+
+              {/* Items List */}
+              <div>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Purchased Items</p>
+                {loadingReceiptItems ? (
+                  <p className="text-gray-400 text-center py-3">Loading receipt items...</p>
+                ) : receiptItems.length === 0 ? (
+                  <p className="text-gray-400 text-center py-3">No line items found.</p>
+                ) : (
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                    {receiptItems.map((item, idx) => (
+                      <div key={idx} className="flex justify-between items-center py-1 border-b border-gray-50 text-[11px]">
+                        <div>
+                          <p className="font-bold text-gray-800 font-sans">{item.product_name}</p>
+                          <p className="text-gray-400">{item.quantity} × {peso(item.unit_price)}</p>
+                        </div>
+                        <span className="font-extrabold text-gray-900">{peso(item.subtotal)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Totals */}
+              <div className="border-t border-dashed border-gray-300 pt-3 space-y-1.5 text-xs">
+                <div className="flex justify-between text-gray-500">
+                  <span>Subtotal</span>
+                  <span>{peso(selectedReceipt.total_amount)}</span>
+                </div>
+                <div className="flex justify-between text-gray-500">
+                  <span>Discount</span>
+                  <span>₱0.00</span>
+                </div>
+                <div className="flex justify-between font-extrabold text-sm text-gray-900 pt-1 border-t border-gray-100">
+                  <span>Total</span>
+                  <span className="text-emerald-600">{peso(selectedReceipt.total_amount)}</span>
+                </div>
+                <div className="flex justify-between text-gray-500">
+                  <span>Cash Tendered</span>
+                  <span>{peso(selectedReceipt.cash_tendered)}</span>
+                </div>
+                <div className="flex justify-between font-extrabold text-gray-700">
+                  <span>Change</span>
+                  <span>{peso(selectedReceipt.change_amount)}</span>
+                </div>
+                <div className="flex justify-between text-[11px] text-gray-400 pt-1">
+                  <span>Payment Method:</span>
+                  <span className="font-bold text-gray-700">{selectedReceipt.payment_method}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
+              <button
+                onClick={handleDownloadReceipt}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-gray-100 text-gray-700 font-bold text-xs rounded-xl hover:bg-gray-200 transition-colors"
+              >
+                <Download size={14} /> Download Receipt
+              </button>
+              <button
+                onClick={handlePrintReceipt}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 text-white font-bold text-xs rounded-xl hover:bg-emerald-700 transition-colors shadow-sm"
+              >
+                <Printer size={14} /> Print Receipt
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
