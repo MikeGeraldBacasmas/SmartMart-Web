@@ -44,6 +44,17 @@ export interface StaffItem {
   temp_password?: string;
 }
 
+export interface StaffProfileData {
+  id: number;
+  user_id: number;
+  staff_code: string;
+  full_name: string;
+  role: string;
+  status: string;
+  joined: string;
+  username: string;
+}
+
 export interface RegisteredCustomer {
   id: number;
   customer_code: string;
@@ -280,6 +291,12 @@ export const api = {
   // Staff
   staff: {
     getAll: (): Promise<StaffItem[]> => request<StaffItem[]>("/staff"),
+    getMyProfile: (): Promise<StaffProfileData> => request<StaffProfileData>("/staff/my-profile"),
+    updateMyProfile: (data: { full_name: string; username: string }): Promise<{ message: string; profile: StaffProfileData }> =>
+      request("/staff/my-profile", {
+        method: "PUT",
+        body: JSON.stringify(data),
+      }),
     create: (data: { username: string; password: string; full_name: string; role?: string }): Promise<StaffItem> =>
       request("/staff", {
         method: "POST",
