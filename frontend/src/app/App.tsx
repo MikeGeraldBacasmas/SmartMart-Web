@@ -10,7 +10,7 @@ import {
   TrendingUp, CheckCircle, X, User, ClipboardList, Store,
   Receipt, Settings, Printer, ChevronRight, ShieldCheck, Pencil,
   Eye, EyeOff, Filter, Upload, Image as ImageIcon, Camera, Download,
-  Flame, Sparkles, ArrowRight, Award, ArrowLeft, ChevronUp, List,
+  Flame, Sparkles, ArrowRight, Award, ArrowLeft, ChevronUp, ChevronDown, List,
 } from "lucide-react";
 
 export const getProductImageUrl = (url?: string | null) => {
@@ -1204,10 +1204,6 @@ function LoginScreen({ onLogin }: { onLogin: (role: Role) => void }) {
           {/* Nav links */}
           <nav className="hidden md:flex items-center gap-7 text-sm font-semibold text-gray-500">
             <a href="#" className="hover:text-[#22c55e] transition-colors">Home</a>
-            <a href="#best-sellers" className="hover:text-[#22c55e] transition-colors flex items-center gap-1.5 text-gray-700 font-bold">
-              <span>Best Sellers</span>
-              <span className="text-[10px] bg-red-500 text-white font-black px-1.5 py-0.5 rounded-full uppercase leading-none">Hot</span>
-            </a>
             <a href="#about" className="hover:text-[#22c55e] transition-colors">About</a>
             <a href="#contact" className="hover:text-[#22c55e] transition-colors">Contact</a>
           </nav>
@@ -1219,132 +1215,156 @@ function LoginScreen({ onLogin }: { onLogin: (role: Role) => void }) {
         </div>
       </header>
 
-      {/* ── Hero ── */}
-      <section className="relative bg-[#1f2937] text-white overflow-hidden">
+      {/* ── Split Hero & Best Sellers Spotlight (Immediately visible above the fold) ── */}
+      <section className="relative bg-[#1f2937] text-white overflow-hidden border-b border-gray-800">
         <div className="absolute top-0 left-0 right-0 h-1 bg-[#facc15]" />
         {/* Subtle background pattern */}
-        <div className="absolute inset-0 opacity-[0.04] pointer-events-none select-none" aria-hidden="true">
-          <div className="absolute top-8 left-10 text-[120px]">🛒</div>
-          <div className="absolute top-12 right-20 text-[90px]">🥤</div>
-          <div className="absolute bottom-12 left-1/4 text-[80px]">🍜</div>
-          <div className="absolute bottom-8 right-1/3 text-[100px]">🧴</div>
-          <div className="absolute top-1/2 right-12 text-[70px]">🍪</div>
-          <div className="absolute top-1/3 left-1/2 text-[60px]">🥛</div>
+        <div className="absolute inset-0 opacity-[0.03] pointer-events-none select-none" aria-hidden="true">
+          <div className="absolute top-6 left-8 text-[100px]">🛒</div>
+          <div className="absolute top-8 right-16 text-[80px]">🥤</div>
+          <div className="absolute bottom-8 left-1/3 text-[70px]">🍜</div>
+          <div className="absolute bottom-6 right-1/4 text-[90px]">🧴</div>
         </div>
-        <div className="relative max-w-4xl mx-auto px-6 py-24 sm:py-28 text-center">
-          <span className="inline-flex items-center gap-2 bg-[#22c55e]/20 text-[#22c55e] text-xs font-bold uppercase tracking-widest px-4 py-1.5 rounded-full mb-6">
-            <Store size={12} /> Welcome to SmartMart
-          </span>
-          <h1 className="text-5xl sm:text-6xl font-extrabold leading-[1.1] tracking-tight">
-            Your Smart<br /><span className="text-[#22c55e]">Convenience Store</span>
-          </h1>
-          <p className="mt-6 text-gray-300 text-lg leading-relaxed max-w-2xl mx-auto">
-            A smarter way to shop at your neighborhood convenience store. Create an account to browse products, check stock availability, and view your purchase history.
-          </p>
-        </div>
-      </section>
 
-      {/* ── Best-Selling Products Section ── */}
-      <section id="best-sellers" className="py-20 px-6 bg-[#f9fafb] border-y border-gray-100 relative">
-        <div className="max-w-6xl mx-auto">
-          <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-4">
-            <div>
-              <span className="inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-widest text-emerald-700 bg-emerald-100/80 px-3.5 py-1.5 rounded-full mb-3">
-                <Flame size={14} className="text-amber-500 fill-amber-500" /> Hot & Trending In-Store
-              </span>
-              <h2 className="text-3xl sm:text-4xl font-extrabold text-[#1f2937] tracking-tight">
-                Best-Selling Products
-              </h2>
-              <p className="text-gray-500 text-sm mt-2 max-w-xl">
-                The most popular and frequently purchased items at SmartMart, updated in real time from completed in-store POS checkouts.
-              </p>
-            </div>
-          </div>
+        <div className="relative max-w-7xl mx-auto px-6 py-10 lg:py-12">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-center">
 
-          {loadingBestSellers && displayBestSellers.length === 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              {[1, 2, 3, 4].map(i => (
-                <div key={i} className="bg-white rounded-3xl p-5 border border-gray-200 shadow-sm animate-pulse space-y-4">
-                  <div className="aspect-square bg-gray-200 rounded-2xl"></div>
-                  <div className="h-4 bg-gray-200 rounded w-2/3"></div>
-                  <div className="h-6 bg-gray-200 rounded w-1/3"></div>
+            {/* Left Column: SmartMart Introduction & Quick Actions */}
+            <div className="lg:col-span-5 flex flex-col justify-center text-left space-y-6">
+              <div>
+                <span className="inline-flex items-center gap-2 bg-[#22c55e]/20 text-[#22c55e] text-xs font-bold uppercase tracking-widest px-3.5 py-1.5 rounded-full mb-4 border border-[#22c55e]/30">
+                  <Store size={13} /> Welcome to SmartMart
+                </span>
+                <h1 className="text-4xl sm:text-5xl font-extrabold leading-[1.12] tracking-tight text-white">
+                  Your Smart<br />
+                  <span className="text-[#22c55e]">Convenience Store</span>
+                </h1>
+                <p className="mt-4 text-gray-300 text-sm sm:text-base leading-relaxed">
+                  A smarter way to shop at your neighborhood convenience store. Browse real-time inventory, discover trending items, and track your purchase history effortlessly.
+                </p>
+              </div>
+
+
+
+              {/* Highlights / Trust Badges */}
+              <div className="pt-4 border-t border-white/10 grid grid-cols-3 gap-3 text-xs text-gray-300">
+                <div className="flex flex-col">
+                  <span className="font-extrabold text-[#22c55e] text-base">34+</span>
+                  <span className="text-[11px] text-gray-400">Products</span>
                 </div>
-              ))}
+                <div className="flex flex-col">
+                  <span className="font-extrabold text-[#facc15] text-base">Real-Time</span>
+                  <span className="text-[11px] text-gray-400">Stock Status</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="font-extrabold text-amber-400 text-base">Live POS</span>
+                  <span className="text-[11px] text-gray-400">Best Sellers</span>
+                </div>
+              </div>
             </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              {displayBestSellers.map((item, idx) => (
-                <div
-                  key={item.id}
-                  className="bg-white rounded-3xl border border-gray-200/90 overflow-hidden shadow-sm hover:shadow-xl hover:border-emerald-400 transition-all duration-300 flex flex-col group relative"
-                >
-                  {/* Top Rank Badge */}
-                  <div className="absolute top-3.5 left-3.5 z-10">
-                    <span className={`inline-flex items-center gap-1 text-[11px] font-black px-2.5 py-1 rounded-lg shadow-sm ${
-                      idx === 0
-                        ? "bg-amber-400 text-gray-950 ring-2 ring-amber-300/50"
-                        : idx === 1
-                        ? "bg-slate-200 text-slate-800"
-                        : idx === 2
-                        ? "bg-amber-700 text-white"
-                        : "bg-emerald-100 text-emerald-800"
-                    }`}>
-                      <Award size={12} /> #{idx + 1} Best Seller
+
+            {/* Right Column: Best-Selling Products Spotlight (Directly visible without scrolling!) */}
+            <div className="lg:col-span-7">
+              <div className="bg-gray-800/90 backdrop-blur-md rounded-3xl border border-gray-700/80 p-5 sm:p-6 shadow-2xl relative">
+
+                {/* Spotlight Header */}
+                <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-700/60">
+                  <div>
+                    <span className="inline-flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-widest text-amber-300 bg-amber-500/20 border border-amber-400/30 px-2.5 py-1 rounded-full mb-1">
+                      <Flame size={12} className="text-amber-400 fill-amber-400" /> Hot & Trending In-Store
                     </span>
-                  </div>
-
-                  {/* Image container */}
-                  <div className={`aspect-square w-full relative overflow-hidden flex items-center justify-center p-6 transition-colors ${CAT_BG[item.category] ?? "bg-gray-50"}`}>
-                    {item.image_url ? (
-                      <img
-                        src={getProductImageUrl(item.image_url) || ""}
-                        alt={item.name}
-                        className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
-                        onError={(e) => { (e.target as any).style.display = "none"; }}
-                      />
-                    ) : (
-                      <Package size={52} className="text-slate-300 group-hover:scale-110 transition-transform" />
-                    )}
-                  </div>
-
-                  {/* Body details */}
-                  <div className="p-5 flex-1 flex flex-col justify-between space-y-3">
-                    <div>
-                      <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
-                        {item.category}
-                      </span>
-                      <h3 className="font-extrabold text-[#111827] text-base leading-snug mt-0.5 group-hover:text-emerald-700 transition-colors line-clamp-1">
-                        {item.name}
-                      </h3>
-                    </div>
-
-                    <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
-                      <div>
-                        <span className="text-xs text-gray-400 font-semibold block">Price</span>
-                        <span className="text-lg font-black text-emerald-700" style={{ fontFamily: "'DM Mono', monospace" }}>
-                          {peso(item.price)}
-                        </span>
-                      </div>
-                      <div className="text-right">
-                        {Number(item.total_sold) > 0 ? (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200/70 px-2 py-0.5 rounded-md">
-                            <Flame size={11} className="text-amber-500 fill-amber-500" />
-                            {item.total_sold} sold
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
-                            In Stock ({item.stock})
-                          </span>
-                        )}
-                      </div>
-                    </div>
+                    <h2 className="text-lg sm:text-xl font-extrabold text-white tracking-tight">
+                      Best-Selling Products
+                    </h2>
                   </div>
                 </div>
-              ))}
+
+                {/* 2x2 Grid of Top 4 Best Sellers */}
+                {loadingBestSellers && displayBestSellers.length === 0 ? (
+                  <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                    {[1, 2, 3, 4].map(i => (
+                      <div key={i} className="bg-gray-900/60 rounded-2xl p-3 border border-gray-700/50 animate-pulse space-y-2">
+                        <div className="aspect-square bg-gray-700/50 rounded-xl"></div>
+                        <div className="h-3 bg-gray-700/50 rounded w-2/3"></div>
+                        <div className="h-4 bg-gray-700/50 rounded w-1/3"></div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                    {displayBestSellers.slice(0, 4).map((item, idx) => (
+                      <div
+                        key={item.id}
+                        className="bg-gray-900/90 rounded-2xl border border-gray-700/80 hover:border-[#22c55e] transition-all duration-300 flex flex-col p-3 group relative shadow-lg overflow-hidden"
+                      >
+                        {/* Top Rank Badge */}
+                        <div className="absolute top-2.5 left-2.5 z-10">
+                          <span className={`inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-md shadow ${
+                            idx === 0
+                              ? "bg-amber-400 text-gray-950 ring-1 ring-amber-300"
+                              : idx === 1
+                              ? "bg-slate-200 text-slate-800"
+                              : idx === 2
+                              ? "bg-amber-600 text-white"
+                              : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                          }`}>
+                            <Award size={10} /> #{idx + 1}
+                          </span>
+                        </div>
+
+                        {/* Image */}
+                        <div className="aspect-[4/3] w-full relative rounded-xl overflow-hidden flex items-center justify-center p-3 mb-2.5 bg-gray-800/80">
+                          {item.image_url ? (
+                            <img
+                              src={getProductImageUrl(item.image_url) || ""}
+                              alt={item.name}
+                              className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
+                              onError={(e) => { (e.target as any).style.display = "none"; }}
+                            />
+                          ) : (
+                            <Package size={32} className="text-gray-500 group-hover:scale-110 transition-transform" />
+                          )}
+                        </div>
+
+                        {/* Info */}
+                        <div className="flex-1 flex flex-col justify-between">
+                          <div>
+                            <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider block">
+                              {item.category}
+                            </span>
+                            <h3 className="font-extrabold text-white text-xs sm:text-sm leading-snug line-clamp-1 group-hover:text-[#22c55e] transition-colors mt-0.5">
+                              {item.name}
+                            </h3>
+                          </div>
+
+                          <div className="pt-2 mt-2 border-t border-gray-800 flex items-center justify-between gap-1">
+                            <span className="text-sm sm:text-base font-black text-[#22c55e]" style={{ fontFamily: "'DM Mono', monospace" }}>
+                              {peso(item.price)}
+                            </span>
+                            {Number(item.total_sold) > 0 ? (
+                              <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-amber-300 bg-amber-400/15 border border-amber-400/30 px-1.5 py-0.5 rounded">
+                                <Flame size={10} className="text-amber-400 fill-amber-400" />
+                                {item.total_sold} sold
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-semibold text-gray-400">
+                                Stock: {item.stock}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+              </div>
             </div>
-          )}
+
+          </div>
         </div>
       </section>
+
 
       {/* ── Why Join SmartMart ── */}
       <section id="about" className="py-20 px-6 bg-white">
