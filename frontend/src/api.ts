@@ -418,8 +418,140 @@ export const api = {
       const query = params.toString() ? `?${params.toString()}` : "";
       return request<ReportTransactionItem[]>(`/reports/transactions${query}`);
     },
+
+    getReturnsAnalytics: (from?: string, to?: string): Promise<ReturnsAnalyticsReport> => {
+      const params = new URLSearchParams();
+      if (from) params.append("from", from);
+      if (to) params.append("to", to);
+      const query = params.toString() ? `?${params.toString()}` : "";
+      return request<ReturnsAnalyticsReport>(`/reports/returns-analytics${query}`);
+    },
+  },
+
+  // Returns & Refunds
+  returns: {
+    getMyReturns: (): Promise<ProductReturn[]> =>
+      request<ProductReturn[]>("/returns/my-returns"),
+
+    getReturnableItems: (transactionId: number | string): Promise<ReturnableItemsResponse> =>
+      request<ReturnableItemsResponse>(`/returns/transaction/${transactionId}/returnable-items`),
+
+    getAll: (params?: { status?: string; from?: string; to?: string; search?: string }): Promise<ReturnsListResponse> => {
+      const q = new URLSearchParams();
+      if (params?.status) q.append("status", params.status);
+      if (params?.from) q.append("from", params.from);
+      if (params?.to) q.append("to", params.to);
+      if (params?.search) q.append("search", params.search);
+      const queryStr = q.toString() ? `?${q.toString()}` : "";
+      return request<ReturnsListResponse>(`/returns${queryStr}`);
+    },
+
+    getById: (id: number | string): Promise<ProductReturn> =>
+      request<ProductReturn>(`/returns/${id}`),
+
+    create: (data: CreateReturnPayload): Promise<{ message: string; return_id: number; return_no: string; refund_amount: number }> =>
+      request("/returns", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+
+    updateStatus: (
+      id: number | string,
+      data: { status: "Approved" | "Completed" | "Rejected"; admin_notes?: string; restock?: boolean }
+    ): Promise<{ message: string; id: string | number; status: string }> =>
+      request(`/returns/${id}/status`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
+
+    cancel: (id: number | string): Promise<{ message: string }> =>
+      request(`/returns/${id}/cancel`, {
+        method: "POST",
+      }),
   },
 };
+
+export type ReturnStatus = "Pending" | "Approved" | "Completed" | "Rejected" | "Cancelled";
+
+export interface ReturnItemRecord {
+  id?: number;
+  return_id?: number;
+  transaction_item_id: number;
+  product_id: number;
+  product_name: string;
+  quantity: number;
+  unit_price: number | string;
+  refund_amount: number | string;
+  restock?: number | boolean;
+  current_stock?: number;
+}
+
+export interface ProductReturn {
+  id: number;
+  return_no: string;
+  transaction_id: number;
+  receipt_no: string;
+  customer_id: number;
+  customer_name?: string;
+  customer_code?: string;
+  customer_phone?: string;
+  status: ReturnStatus;
+  reason: string;
+  customer_notes?: string | null;
+  admin_notes?: string | null;
+  refund_amount: number | string;
+  created_at: string;
+  processed_at?: string | null;
+  processed_by_username?: string | null;
+  item_count?: number;
+  total_items_quantity?: number;
+  items?: ReturnItemRecord[];
+}
+
+export interface ReturnableItem {
+  transaction_item_id: number;
+  product_id: number;
+  product_name: string;
+  unit_price: number | string;
+  purchased_quantity: number;
+  subtotal: number | string;
+  already_returned: number;
+  available_quantity: number;
+  is_returnable: boolean;
+}
+
+export interface ReturnableItemsResponse {
+  transaction: {
+    id: number;
+    receipt_no: string;
+    customer_id: number;
+    total_amount: number | string;
+    date: string;
+  };
+  items: ReturnableItem[];
+}
+
+export interface ReturnsListResponse {
+  returns: ProductReturn[];
+  summary: {
+    total_returns: number;
+    pending_count: number;
+    approved_count: number;
+    completed_count: number;
+    rejected_count: number;
+    total_refunded: number | string;
+  };
+}
+
+export interface CreateReturnPayload {
+  transaction_id: number;
+  reason: string;
+  customer_notes?: string;
+  items: Array<{
+    transaction_item_id: number;
+    quantity: number;
+  }>;
+}
 
 export interface ReportPeriodStats {
   total_sales: number;
@@ -552,4 +684,52 @@ export interface ReportTransactionItem {
   status: string;
   date: string;
   raw_created_at: string;
+}
+
+export interface ReturnReasonStat {
+  reason: string;
+  count: number;
+  refund_amount: number;
+  items_count: number;
+}
+
+export interface TopReturnedProduct {
+  product_id: number;
+  product_name: string;
+  category: string;
+  return_occurrences: number;
+  total_quantity_returned: number;
+  total_refund_amount: number;
+  total_restocked_quantity: number;
+}
+
+export interface ReportReturnItem {
+  id: number;
+  return_no: string;
+  receipt_no: string;
+  customer_name: string;
+  customer_code: string;
+  status: string;
+  reason: string;
+  customer_notes?: string | null;
+  admin_notes?: string | null;
+  refund_amount: number;
+  date: string;
+  items_count: number;
+  total_items_quantity: number;
+  returned_items_summary: string;
+}
+
+export interface ReturnsAnalyticsReport {
+  summary: {
+    total_returns: number;
+    pending_count: number;
+    approved_count: number;
+    rejected_count: number;
+    total_refunded: number;
+    items_returned_count: number;
+  };
+  reasons: ReturnReasonStat[];
+  top_returned_products: TopReturnedProduct[];
+  returns_list: ReportReturnItem[];
 }

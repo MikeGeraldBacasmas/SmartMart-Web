@@ -4,7 +4,8 @@ import {
   Download, Printer, FileSpreadsheet, FileText, Search, Filter,
   RefreshCw, CheckCircle2, AlertCircle, Eye, X, ArrowUpRight,
   ArrowDownRight, Package, UserCheck, ShieldCheck, CreditCard,
-  Building2, Sparkles, ChevronDown, BarChart2, PieChart as PieChartIcon
+  Building2, Sparkles, ChevronDown, BarChart2, PieChart as PieChartIcon,
+  RotateCcw,
 } from "lucide-react";
 import {
   ResponsiveContainer, AreaChart, Area, BarChart, Bar, PieChart, Pie,
@@ -21,6 +22,8 @@ import {
   StaffPerformanceItem,
   PaymentMethodsReport,
   ReportTransactionItem,
+  ReturnsAnalyticsReport,
+  ReportReturnItem,
 } from "../../../api";
 import logoImg from "../../../assets/SmartMart_Logo.jpg";
 
@@ -127,6 +130,10 @@ export default function ReportsPage() {
   const [staffPerformance, setStaffPerformance] = useState<StaffPerformanceItem[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethodsReport | null>(null);
   const [transactions, setTransactions] = useState<ReportTransactionItem[]>([]);
+  const [returnsData, setReturnsData] = useState<ReturnsAnalyticsReport | null>(null);
+  const [returnSearch, setReturnSearch] = useState("");
+  const [returnStatusFilter, setReturnStatusFilter] = useState("All");
+  const [selectedReturnDetail, setSelectedReturnDetail] = useState<ReportReturnItem | null>(null);
 
   // Client-side sort for best sellers
   const sortedBestSellers = useMemo(() => {
@@ -222,6 +229,7 @@ export default function ReportsPage() {
         staffRes,
         payRes,
         txRes,
+        returnsRes,
       ] = await Promise.all([
         api.reports.getSummary(from, to),
         api.reports.getSalesOverview(from, to, overviewGroupBy),
@@ -231,6 +239,7 @@ export default function ReportsPage() {
         api.reports.getStaffPerformance(from, to),
         api.reports.getPaymentMethods(from, to),
         api.reports.getTransactions({ from, to }),
+        api.reports.getReturnsAnalytics(from, to),
       ]);
 
       setSummary(sumRes);
@@ -241,6 +250,7 @@ export default function ReportsPage() {
       setStaffPerformance(staffRes);
       setPaymentMethods(payRes);
       setTransactions(txRes);
+      setReturnsData(returnsRes);
     } catch (err: any) {
       console.error("Failed to load reports data:", err);
       setError(err.message || "Unable to load report data. Please try again.");
@@ -318,6 +328,40 @@ export default function ReportsPage() {
     return result;
   }, [transactions, txPaymentFilter, txSearch]);
 
+  // Filtered returns list
+  const filteredReturns = useMemo(() => {
+    if (!returnsData) return [];
+    let result = returnsData.returns_list;
+    if (returnStatusFilter !== "All") {
+      result = result.filter(r => r.status === returnStatusFilter);
+    }
+    if (returnSearch.trim()) {
+      const q = returnSearch.toLowerCase().trim();
+      result = result.filter(
+        r =>
+          (r.return_no && r.return_no.toLowerCase().includes(q)) ||
+          (r.receipt_no && r.receipt_no.toLowerCase().includes(q)) ||
+          (r.customer_name && r.customer_name.toLowerCase().includes(q)) ||
+          (r.customer_code && r.customer_code.toLowerCase().includes(q)) ||
+          (r.reason && r.reason.toLowerCase().includes(q)) ||
+          (r.returned_items_summary && r.returned_items_summary.toLowerCase().includes(q))
+      );
+    }
+    return result;
+  }, [returnsData, returnStatusFilter, returnSearch]);
+
+  // Return status color helper
+  const getReturnStatusStyle = (status: string) => {
+    switch (status) {
+      case "Pending": return "bg-amber-50 text-amber-700 border-amber-200";
+      case "Approved": return "bg-blue-50 text-blue-700 border-blue-200";
+      case "Completed": return "bg-emerald-50 text-emerald-700 border-emerald-200";
+      case "Rejected": return "bg-red-50 text-red-700 border-red-200";
+      case "Cancelled": return "bg-gray-100 text-gray-500 border-gray-200";
+      default: return "bg-gray-50 text-gray-600 border-gray-200";
+    }
+  };
+
   // Export handlers
   const handleExportCSV = () => {
     if (!summary) return;
@@ -353,6 +397,48 @@ export default function ReportsPage() {
     displayedTransactions.forEach(t => {
       csv += `"${t.receipt_no}","${t.date}","${t.customer.replace(/"/g, '""')}","${t.cashier.replace(/"/g, '""')}",${t.items_count},${t.total_amount},"${t.payment_method}","${t.status}"\n`;
     });
+    csv += `\n`;
+
+    if (returnsData) {
+      csv += `--- RETURNS & REFUNDS SUMMARY ---\n`;
+      csv += `Total Return Requests,${returnsData.summary.total_returns}\n`;
+      csv += `Pending Requests,${returnsData.summary.pending_count}\n`;
+      csv += `Approved / Done Requests,${returnsData.summary.approved_count}\n`;
+      csv += `Rejected Requests,${returnsData.summary.rejected_count}\n`;
+      csv += `Total Refunded Amount,${returnsData.summary.total_refunded}\n`;
+      csv += `Total Items Returned,${returnsData.summary.items_returned_count}\n\n`;
+
+      if (returnsData.reasons && returnsData.reasons.length > 0) {
+        csv += `--- RETURN REASONS BREAKDOWN ---\n`;
+        csv += `Reason,Count,Refund Amount,Items Returned\n`;
+        returnsData.reasons.forEach(r => {
+          csv += `"${(r.reason || "").replace(/"/g, '""')}",${r.count},${r.refund_amount},${r.items_count}\n`;
+        });
+        csv += `\n`;
+      }
+
+      if (returnsData.top_returned_products && returnsData.top_returned_products.length > 0) {
+        csv += `--- TOP RETURNED PRODUCTS ---\n`;
+        csv += `Product Name,Category,Return Incidents,Quantity Returned,Total Refund Amount,Restocked Quantity\n`;
+        returnsData.top_returned_products.forEach(p => {
+          csv += `"${(p.product_name || "").replace(/"/g, '""')}","${(p.category || "").replace(/"/g, '""')}",${p.return_occurrences},${p.total_quantity_returned},${p.total_refund_amount},${p.total_restocked_quantity}\n`;
+        });
+        csv += `\n`;
+      }
+
+      const returnList = returnsData.returns_list || [];
+      if (returnList.length > 0) {
+        csv += `--- RETURN REQUESTS & RETURNED ITEMS LOG ---\n`;
+        csv += `Return No,Date,Receipt No,Customer Name,Customer Code,Reason,Returned Items Summary,Quantity Returned,Refund Amount,Status,Customer Notes,Admin Notes\n`;
+        returnList.forEach(r => {
+          const custNotes = (r.customer_notes || "").replace(/"/g, '""');
+          const admNotes = (r.admin_notes || "").replace(/"/g, '""');
+          const itemsSummary = (r.returned_items_summary || "").replace(/"/g, '""');
+          csv += `"${r.return_no}","${r.date}","${r.receipt_no}","${(r.customer_name || "").replace(/"/g, '""')}","${r.customer_code || ""}","${(r.reason || "").replace(/"/g, '""')}","${itemsSummary}",${r.total_items_quantity || r.items_count || 1},${r.refund_amount},"${r.status}","${custNotes}","${admNotes}"\n`;
+        });
+        csv += `\n`;
+      }
+    }
 
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -435,6 +521,59 @@ export default function ReportsPage() {
           <td class="text-center"><span class="badge">Cash (Walk-in)</span></td>
           <td class="text-center">${t.status}</td>
         </tr>`
+      )
+      .join("");
+
+    const returnReasonRows = (returnsData?.reasons || [])
+      .map(
+        r => `
+        <tr>
+          <td>${r.reason}</td>
+          <td class="text-center font-mono">${r.count}</td>
+          <td class="text-center font-mono">${r.items_count}</td>
+          <td class="text-right font-mono font-bold">₱${r.refund_amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+        </tr>`
+      )
+      .join("");
+
+    const topReturnedRows = (returnsData?.top_returned_products || [])
+      .slice(0, 10)
+      .map(
+        p => `
+        <tr>
+          <td class="font-bold">${p.product_name}</td>
+          <td>${p.category}</td>
+          <td class="text-center font-mono font-bold">${p.return_occurrences}</td>
+          <td class="text-center font-mono font-bold" style="color:#b91c1c">${p.total_quantity_returned}</td>
+          <td class="text-center font-mono font-bold" style="color:#047857">${p.total_restocked_quantity}</td>
+          <td class="text-right font-mono font-bold">₱${p.total_refund_amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+        </tr>`
+      )
+      .join("");
+
+    const returnLogRows = (returnsData?.returns_list || [])
+      .slice(0, 25)
+      .map(
+        r => {
+          let badgeClass = "badge-pending";
+          if (r.status === "Approved") badgeClass = "badge-approved";
+          else if (r.status === "Completed") badgeClass = "badge-completed";
+          else if (r.status === "Rejected") badgeClass = "badge-rejected";
+          else if (r.status === "Cancelled") badgeClass = "badge-cancelled";
+
+          return `
+          <tr>
+            <td class="font-mono font-bold" style="color:#ea580c">${r.return_no}</td>
+            <td class="font-mono text-sm">${r.date}</td>
+            <td class="font-mono text-muted">${r.receipt_no}</td>
+            <td><strong>${r.customer_name}</strong> <span class="text-muted font-mono">(${r.customer_code})</span></td>
+            <td>${r.returned_items_summary || "—"}</td>
+            <td>${r.reason}</td>
+            <td class="text-center font-mono font-bold">${r.total_items_quantity || r.items_count || 1}</td>
+            <td class="text-right font-mono font-bold">₱${Number(r.refund_amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+            <td class="text-center"><span class="badge ${badgeClass}">${r.status}</span></td>
+          </tr>`;
+        }
       )
       .join("");
 
@@ -584,6 +723,31 @@ export default function ReportsPage() {
             padding: 2px 6px;
             border-radius: 4px;
             border: 1px solid #a7f3d0;
+          }
+          .badge-pending {
+            background: #fffbeb;
+            color: #b45309;
+            border: 1px solid #fde68a;
+          }
+          .badge-approved {
+            background: #eff6ff;
+            color: #1d4ed8;
+            border: 1px solid #bfdbfe;
+          }
+          .badge-completed {
+            background: #ecfdf5;
+            color: #047857;
+            border: 1px solid #a7f3d0;
+          }
+          .badge-rejected {
+            background: #fef2f2;
+            color: #b91c1c;
+            border: 1px solid #fecaca;
+          }
+          .badge-cancelled {
+            background: #f3f4f6;
+            color: #6b7280;
+            border: 1px solid #e5e7eb;
           }
           .two-col {
             display: grid;
@@ -737,6 +901,104 @@ export default function ReportsPage() {
             </thead>
             <tbody>
               ${recentTxRows || '<tr><td colspan="8" class="text-center text-muted">No transactions recorded</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="section" style="margin-top: 18px;">
+          <div class="section-heading" style="color: #c2410c; border-bottom-color: #ffedd5;">
+            Product Returns & Refunds Summary
+          </div>
+          <div class="kpi-container" style="grid-template-columns: repeat(6, 1fr); margin-bottom: 12px;">
+            <div class="kpi-box" style="border-color: #ffedd5; background: #fffaf5;">
+              <div class="kpi-title" style="color: #9a3412;">Total Returns</div>
+              <div class="kpi-value" style="color: #c2410c;">${returnsData?.summary.total_returns ?? 0}</div>
+              <div class="kpi-sub" style="color: #ea580c;">Total requests</div>
+            </div>
+            <div class="kpi-box" style="border-color: #ffedd5; background: #fffaf5;">
+              <div class="kpi-title" style="color: #9a3412;">Pending</div>
+              <div class="kpi-value" style="color: #d97706;">${returnsData?.summary.pending_count ?? 0}</div>
+              <div class="kpi-sub" style="color: #b45309;">Awaiting action</div>
+            </div>
+            <div class="kpi-box" style="border-color: #ffedd5; background: #fffaf5;">
+              <div class="kpi-title" style="color: #9a3412;">Approved / Done</div>
+              <div class="kpi-value" style="color: #047857;">${returnsData?.summary.approved_count ?? 0}</div>
+              <div class="kpi-sub" style="color: #059669;">Resolved</div>
+            </div>
+            <div class="kpi-box" style="border-color: #ffedd5; background: #fffaf5;">
+              <div class="kpi-title" style="color: #9a3412;">Rejected</div>
+              <div class="kpi-value" style="color: #dc2626;">${returnsData?.summary.rejected_count ?? 0}</div>
+              <div class="kpi-sub" style="color: #b91c1c;">Declined</div>
+            </div>
+            <div class="kpi-box" style="border-color: #ffedd5; background: #fffaf5;">
+              <div class="kpi-title" style="color: #9a3412;">Total Refunded</div>
+              <div class="kpi-value" style="color: #c2410c;">₱${(returnsData?.summary.total_refunded ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              <div class="kpi-sub" style="color: #ea580c;">Cash refunded</div>
+            </div>
+            <div class="kpi-box" style="border-color: #ffedd5; background: #fffaf5;">
+              <div class="kpi-title" style="color: #9a3412;">Items Returned</div>
+              <div class="kpi-value" style="color: #c2410c;">${returnsData?.summary.items_returned_count ?? 0} <span style="font-size:7.5pt;color:#6b7280">units</span></div>
+              <div class="kpi-sub" style="color: #ea580c;">Physical units</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="two-col" style="margin-bottom: 16px;">
+          <div class="section">
+            <div class="section-heading" style="color: #c2410c; border-bottom-color: #ffedd5;">Return Reasons Breakdown</div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Reason</th>
+                  <th class="text-center">Requests</th>
+                  <th class="text-center">Items</th>
+                  <th class="text-right">Refund Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${returnReasonRows || '<tr><td colspan="4" class="text-center text-muted">No return reasons recorded</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="section">
+            <div class="section-heading" style="color: #c2410c; border-bottom-color: #ffedd5;">Top Returned Products</div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Product</th>
+                  <th>Category</th>
+                  <th class="text-center">Reqs</th>
+                  <th class="text-center">Returned</th>
+                  <th class="text-center">Restocked</th>
+                  <th class="text-right">Refund</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${topReturnedRows || '<tr><td colspan="6" class="text-center text-muted">No returned products recorded</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-heading" style="color: #c2410c; border-bottom-color: #ffedd5;">Return Requests & Returned Items Log</div>
+          <table>
+            <thead>
+              <tr>
+                <th>Return No.</th>
+                <th>Date & Time</th>
+                <th>Receipt No.</th>
+                <th>Customer</th>
+                <th>Returned Items</th>
+                <th>Reason</th>
+                <th class="text-center">Qty</th>
+                <th class="text-right">Refund</th>
+                <th class="text-center">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${returnLogRows || '<tr><td colspan="9" class="text-center text-muted">No return records for this period</td></tr>'}
             </tbody>
           </table>
         </div>
@@ -964,7 +1226,7 @@ export default function ReportsPage() {
             </button>
 
             {showExportMenu && (
-              <div className="absolute right-0 mt-2 w-48 bg-white rounded-2xl border border-gray-200 shadow-2xl z-30 p-1.5 space-y-1">
+              <div className="absolute right-0 mt-2 w-52 bg-white rounded-2xl border border-gray-200 shadow-2xl z-30 p-1.5 space-y-1">
                 <button
                   onClick={handleExportPrint}
                   className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 rounded-xl transition-colors text-left"
@@ -975,7 +1237,7 @@ export default function ReportsPage() {
                   onClick={handleExportCSV}
                   className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 rounded-xl transition-colors text-left"
                 >
-                  <FileSpreadsheet size={15} /> Export as CSV / Excel
+                  <FileSpreadsheet size={15} /> Export Full Report CSV
                 </button>
               </div>
             )}
@@ -1668,6 +1930,242 @@ export default function ReportsPage() {
             </div>
           </div>
 
+          {/* ─── 11. RETURNS & REFUNDS ANALYTICS ──────────────────────────── */}
+          {returnsData && (
+            <div className="space-y-4">
+              {/* Returns Section Header */}
+              <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6 shadow-sm space-y-5">
+                <div className="flex items-center gap-2">
+                  <RotateCcw size={20} className="text-orange-500" />
+                  <h2 className="text-lg font-extrabold text-[#111827]">Returns & Refunds Analytics</h2>
+                  {returnsData.summary.pending_count > 0 && (
+                    <span className="ml-auto px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-extrabold border border-amber-200 animate-pulse">
+                      {returnsData.summary.pending_count} Pending
+                    </span>
+                  )}
+                </div>
+
+                {/* Returns Summary Cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                  <div className="bg-gradient-to-br from-orange-50 to-orange-100/50 rounded-xl border border-orange-200 p-3.5 text-center">
+                    <p className="text-[10px] font-bold text-orange-400 uppercase tracking-wider">Total Returns</p>
+                    <p className="text-xl font-extrabold text-orange-700 mt-1 font-mono">{returnsData.summary.total_returns}</p>
+                  </div>
+                  <div className="bg-gradient-to-br from-amber-50 to-amber-100/50 rounded-xl border border-amber-200 p-3.5 text-center">
+                    <p className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">Pending</p>
+                    <p className="text-xl font-extrabold text-amber-700 mt-1 font-mono">{returnsData.summary.pending_count}</p>
+                  </div>
+                  <div className="bg-gradient-to-br from-emerald-50 to-emerald-100/50 rounded-xl border border-emerald-200 p-3.5 text-center">
+                    <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">Approved</p>
+                    <p className="text-xl font-extrabold text-emerald-700 mt-1 font-mono">{returnsData.summary.approved_count}</p>
+                  </div>
+                  <div className="bg-gradient-to-br from-red-50 to-red-100/50 rounded-xl border border-red-200 p-3.5 text-center">
+                    <p className="text-[10px] font-bold text-red-400 uppercase tracking-wider">Rejected</p>
+                    <p className="text-xl font-extrabold text-red-700 mt-1 font-mono">{returnsData.summary.rejected_count}</p>
+                  </div>
+                  <div className="bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-xl border border-blue-200 p-3.5 text-center">
+                    <p className="text-[10px] font-bold text-blue-400 uppercase tracking-wider">Total Refunded</p>
+                    <p className="text-lg font-extrabold text-blue-700 mt-1 font-mono">{peso(returnsData.summary.total_refunded)}</p>
+                  </div>
+                  <div className="bg-gradient-to-br from-purple-50 to-purple-100/50 rounded-xl border border-purple-200 p-3.5 text-center">
+                    <p className="text-[10px] font-bold text-purple-400 uppercase tracking-wider">Items Returned</p>
+                    <p className="text-xl font-extrabold text-purple-700 mt-1 font-mono">{returnsData.summary.items_returned_count}</p>
+                  </div>
+                </div>
+
+                {/* Return Reasons & Top Returned Products - Side by Side */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {/* Return Reasons Breakdown */}
+                  {returnsData.reasons.length > 0 && (
+                    <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 space-y-3">
+                      <h3 className="text-sm font-extrabold text-gray-800 flex items-center gap-1.5">
+                        <PieChartIcon size={14} className="text-orange-500" />
+                        Return Reasons Breakdown
+                      </h3>
+                      <div className="space-y-2">
+                        {returnsData.reasons.map((r, i) => {
+                          const totalReasons = returnsData.reasons.reduce((s, x) => s + x.count, 0);
+                          const pct = totalReasons > 0 ? ((r.count / totalReasons) * 100).toFixed(1) : "0";
+                          return (
+                            <div key={i} className="space-y-1">
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="font-bold text-gray-700 truncate pr-2">{r.reason}</span>
+                                <span className="font-mono font-extrabold text-gray-900 shrink-0">
+                                  {r.count} <span className="text-gray-400 font-sans">({pct}%)</span>
+                                </span>
+                              </div>
+                              <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full rounded-full transition-all duration-500"
+                                  style={{
+                                    width: `${pct}%`,
+                                    backgroundColor: CATEGORY_COLORS[i % CATEGORY_COLORS.length],
+                                  }}
+                                />
+                              </div>
+                              <div className="flex items-center gap-3 text-[10px] text-gray-400">
+                                <span>{r.items_count} items</span>
+                                <span>Refunded: {peso(r.refund_amount)}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Top Returned Products */}
+                  {returnsData.top_returned_products.length > 0 && (
+                    <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 space-y-3">
+                      <h3 className="text-sm font-extrabold text-gray-800 flex items-center gap-1.5">
+                        <Package size={14} className="text-red-500" />
+                        Top Returned Products
+                      </h3>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="border-b border-gray-200 text-gray-500 font-extrabold uppercase tracking-wider text-left">
+                              <th className="py-2 px-2">Product</th>
+                              <th className="py-2 px-2 text-center">Returns</th>
+                              <th className="py-2 px-2 text-center">Qty</th>
+                              <th className="py-2 px-2 text-center">Restocked</th>
+                              <th className="py-2 px-2 text-right">Refund</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {returnsData.top_returned_products.map((p, i) => (
+                              <tr key={i} className="hover:bg-white transition-colors">
+                                <td className="py-2 px-2">
+                                  <p className="font-bold text-gray-800">{p.product_name}</p>
+                                  <p className="text-[10px] text-gray-400">{p.category}</p>
+                                </td>
+                                <td className="py-2 px-2 text-center font-mono font-bold text-gray-700">{p.return_occurrences}</td>
+                                <td className="py-2 px-2 text-center font-mono font-bold text-red-600">{p.total_quantity_returned}</td>
+                                <td className="py-2 px-2 text-center font-mono font-bold text-emerald-600">{p.total_restocked_quantity}</td>
+                                <td className="py-2 px-2 text-right font-mono font-extrabold text-gray-900">{peso(p.total_refund_amount)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Returns List Table */}
+              <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6 shadow-sm space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <RotateCcw size={18} className="text-orange-500" />
+                      <h3 className="text-base font-extrabold text-[#111827]">Return Requests Log</h3>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      All product return requests for the selected period ({filteredReturns.length} records)
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {/* Search */}
+                    <div className="relative">
+                      <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <input
+                        value={returnSearch}
+                        onChange={e => setReturnSearch(e.target.value)}
+                        placeholder="Search returns..."
+                        className="w-48 pl-8 pr-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-orange-500/30"
+                      />
+                    </div>
+                    {/* Status Filter */}
+                    <div className="flex items-center gap-1">
+                      {["All", "Pending", "Approved", "Completed", "Rejected", "Cancelled"].map(s => (
+                        <button
+                          key={s}
+                          onClick={() => setReturnStatusFilter(s)}
+                          className={`px-2.5 py-1 text-[10px] font-bold rounded-lg transition-colors border ${
+                            returnStatusFilter === s
+                              ? "bg-orange-500 text-white border-orange-500"
+                              : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"
+                          }`}
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-gray-200 bg-gray-50 text-gray-500 font-extrabold uppercase tracking-wider text-left">
+                        <th className="py-3 px-3">Return No.</th>
+                        <th className="py-3 px-3">Date</th>
+                        <th className="py-3 px-3">Receipt</th>
+                        <th className="py-3 px-3">Customer</th>
+                        <th className="py-3 px-3">Reason</th>
+                        <th className="py-3 px-3 text-center">Items</th>
+                        <th className="py-3 px-3 text-right">Refund</th>
+                        <th className="py-3 px-3 text-center">Status</th>
+                        <th className="py-3 px-3 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {filteredReturns.length === 0 ? (
+                        <tr>
+                          <td colSpan={9} className="py-8 text-center text-gray-400">
+                            No return requests found for the selected filter.
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredReturns.map(r => (
+                          <tr key={r.id} className="hover:bg-gray-50 transition-colors">
+                            <td className="py-3 px-3 font-mono font-extrabold text-orange-600">
+                              {r.return_no}
+                            </td>
+                            <td className="py-3 px-3 text-gray-500 font-mono text-[11px]">
+                              {r.date}
+                            </td>
+                            <td className="py-3 px-3 font-mono font-bold text-blue-600 text-[11px]">
+                              {r.receipt_no}
+                            </td>
+                            <td className="py-3 px-3">
+                              <p className="font-semibold text-gray-900">{r.customer_name}</p>
+                              <p className="text-[10px] text-gray-400">{r.customer_code}</p>
+                            </td>
+                            <td className="py-3 px-3 text-gray-600 max-w-[140px] truncate" title={r.reason}>
+                              {r.reason}
+                            </td>
+                            <td className="py-3 px-3 text-center font-mono font-bold text-gray-700">
+                              {r.total_items_quantity}
+                            </td>
+                            <td className="py-3 px-3 text-right font-mono font-extrabold text-emerald-600">
+                              {peso(r.refund_amount)}
+                            </td>
+                            <td className="py-3 px-3 text-center">
+                              <span className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] border ${getReturnStatusStyle(r.status)}`}>
+                                {r.status}
+                              </span>
+                            </td>
+                            <td className="py-3 px-3 text-right">
+                              <button
+                                onClick={() => setSelectedReturnDetail(r)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-orange-700 bg-orange-50 hover:bg-orange-100 rounded-lg transition-colors"
+                              >
+                                <Eye size={12} /> View
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* ─── 12. RECEIPT / TRANSACTION HISTORY ──────────────────────────── */}
           <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6 shadow-sm space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -1770,6 +2268,107 @@ export default function ReportsPage() {
             </div>
           </div>
         </>
+      )}
+
+      {/* ─── RETURN DETAIL MODAL ──────────────────────────────────────────── */}
+      {selectedReturnDetail && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl border border-gray-200 p-6 sm:p-7 w-full max-w-lg shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center">
+                  <RotateCcw size={18} />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-gray-900 text-sm">Return Request Detail</h3>
+                  <p className="text-[10px] text-gray-400">{selectedReturnDetail.return_no}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedReturnDetail(null)}
+                className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Status Badge */}
+            <div className="flex items-center justify-center">
+              <span className={`px-4 py-1.5 rounded-full font-extrabold text-xs border ${getReturnStatusStyle(selectedReturnDetail.status)}`}>
+                {selectedReturnDetail.status}
+              </span>
+            </div>
+
+            {/* Info Grid */}
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="p-3 bg-gray-50 rounded-xl">
+                <p className="text-[10px] font-bold text-gray-400 uppercase">Receipt No.</p>
+                <p className="font-extrabold text-blue-600 font-mono mt-0.5">{selectedReturnDetail.receipt_no}</p>
+              </div>
+              <div className="p-3 bg-gray-50 rounded-xl">
+                <p className="text-[10px] font-bold text-gray-400 uppercase">Date Requested</p>
+                <p className="font-extrabold text-gray-800 mt-0.5">{selectedReturnDetail.date}</p>
+              </div>
+              <div className="p-3 bg-gray-50 rounded-xl">
+                <p className="text-[10px] font-bold text-gray-400 uppercase">Customer</p>
+                <p className="font-extrabold text-gray-800 mt-0.5">{selectedReturnDetail.customer_name}</p>
+                <p className="text-[10px] text-gray-400">{selectedReturnDetail.customer_code}</p>
+              </div>
+              <div className="p-3 bg-gray-50 rounded-xl">
+                <p className="text-[10px] font-bold text-gray-400 uppercase">Reason</p>
+                <p className="font-extrabold text-gray-800 mt-0.5">{selectedReturnDetail.reason}</p>
+              </div>
+            </div>
+
+            {/* Returned Items Summary */}
+            <div className="bg-orange-50/50 rounded-xl border border-orange-100 p-4 space-y-2">
+              <p className="text-[10px] font-bold text-orange-500 uppercase tracking-wider">Returned Items</p>
+              <p className="text-xs text-gray-700 font-semibold leading-relaxed">
+                {selectedReturnDetail.returned_items_summary}
+              </p>
+              <div className="flex items-center gap-4 pt-1 border-t border-orange-100 mt-2">
+                <span className="text-[10px] text-gray-400">
+                  {selectedReturnDetail.items_count} product{selectedReturnDetail.items_count !== 1 ? 's' : ''} · {selectedReturnDetail.total_items_quantity} total qty
+                </span>
+              </div>
+            </div>
+
+            {/* Customer Notes */}
+            {selectedReturnDetail.customer_notes && (
+              <div className="bg-gray-50 rounded-xl border border-gray-100 p-3 space-y-1">
+                <p className="text-[10px] font-bold text-gray-400 uppercase">Customer Notes</p>
+                <p className="text-xs text-gray-700">{selectedReturnDetail.customer_notes}</p>
+              </div>
+            )}
+
+            {/* Admin Notes */}
+            {selectedReturnDetail.admin_notes && (
+              <div className="bg-blue-50/50 rounded-xl border border-blue-100 p-3 space-y-1">
+                <p className="text-[10px] font-bold text-blue-400 uppercase">Store Response / Admin Notes</p>
+                <p className="text-xs text-blue-800 font-semibold">{selectedReturnDetail.admin_notes}</p>
+              </div>
+            )}
+
+            {/* Refund Total */}
+            <div className="border-t border-dashed border-gray-300 pt-3">
+              <div className="flex justify-between items-center text-sm">
+                <span className="font-bold text-gray-600">Total Refund Amount</span>
+                <span className="font-extrabold text-xl text-emerald-600 font-mono">{peso(selectedReturnDetail.refund_amount)}</span>
+              </div>
+            </div>
+
+            {/* Close */}
+            <div className="pt-2 border-t border-gray-100">
+              <button
+                onClick={() => setSelectedReturnDetail(null)}
+                className="w-full py-2.5 bg-gray-100 text-gray-700 font-bold text-xs rounded-xl hover:bg-gray-200 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ─── 13. RECEIPT DETAILS MODAL ─────────────────────────────────────── */}

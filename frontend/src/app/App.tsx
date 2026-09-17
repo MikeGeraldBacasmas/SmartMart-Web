@@ -4,6 +4,9 @@ import { Toaster, toast } from "sonner";
 import { api, getSavedUser, UserPayload, RegisteredCustomer, CustomerProfileData, StaffProfileData, DashboardSummary, TransactionItem, StaffItem } from "../api";
 import logoImg from "../assets/SmartMart_Logo.jpg";
 import ReportsPage from "./components/reports/ReportsPage";
+import CustomerReturns from "./components/returns/CustomerReturns";
+import ReturnsManagement from "./components/returns/ReturnsManagement";
+import RequestReturnModal from "./components/returns/RequestReturnModal";
 import {
   LayoutDashboard, Package, ShoppingCart, Users, BarChart3,
   LogOut, Search, Plus, Minus, Trash2, Bell, AlertTriangle,
@@ -11,6 +14,7 @@ import {
   Receipt, Settings, Printer, ChevronRight, ShieldCheck, Pencil,
   Eye, EyeOff, Filter, Upload, Image as ImageIcon, Camera, Download,
   Flame, Sparkles, ArrowRight, Award, ArrowLeft, ChevronUp, ChevronDown, List,
+  RotateCcw,
 } from "lucide-react";
 
 export const getProductImageUrl = (url?: string | null) => {
@@ -22,9 +26,9 @@ export const getProductImageUrl = (url?: string | null) => {
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Role = "login" | "admin" | "staff" | "customer";
-type AdminPage = "dashboard" | "products" | "inventory" | "categories" | "sales" | "customers" | "staff" | "reports" | "settings";
-type StaffPage = "dashboard" | "pos" | "transactions" | "profile";
-type CustomerPage = "browse" | "history" | "profile";
+type AdminPage = "dashboard" | "products" | "inventory" | "categories" | "sales" | "returns" | "customers" | "staff" | "reports" | "settings";
+type StaffPage = "dashboard" | "pos" | "transactions" | "returns" | "profile";
+type CustomerPage = "browse" | "history" | "returns" | "profile";
 
 interface Product {
   id: number;
@@ -411,6 +415,7 @@ const NAV_ITEMS: Record<SidebarRole, NavItem[]> = {
     { id: "categories", icon: <ClipboardList size={18} />, label: "Categories" },
     { id: "inventory", icon: <BarChart3 size={18} />, label: "Inventory" },
     { id: "sales", icon: <ShoppingCart size={18} />, label: "Sales" },
+    { id: "returns", icon: <RotateCcw size={18} />, label: "Returns" },
     { id: "customers", icon: <User size={18} />, label: "Customers" },
     { id: "staff", icon: <Users size={18} />, label: "Staff" },
     { id: "reports", icon: <TrendingUp size={18} />, label: "Reports" },
@@ -420,11 +425,13 @@ const NAV_ITEMS: Record<SidebarRole, NavItem[]> = {
     { id: "dashboard", icon: <LayoutDashboard size={18} />, label: "Dashboard" },
     { id: "pos", icon: <ShoppingCart size={18} />, label: "Point of Sale" },
     { id: "transactions", icon: <Receipt size={18} />, label: "Transactions" },
+    { id: "returns", icon: <RotateCcw size={18} />, label: "Returns" },
     { id: "profile", icon: <User size={18} />, label: "My Profile" },
   ],
   customer: [
     { id: "browse", icon: <Store size={18} />, label: "Browse Products" },
     { id: "history", icon: <Receipt size={18} />, label: "Purchase History" },
+    { id: "returns", icon: <RotateCcw size={18} />, label: "Product Returns" },
     { id: "profile", icon: <User size={18} />, label: "My Profile" },
   ],
 };
@@ -435,11 +442,12 @@ const ROLE_LABELS: Record<SidebarRole, string> = {
   customer: "Customer",
 };
 
-function Sidebar({ role, activePage, onNavigate, onLogout, userName, pendingCount = 0 }: {
+function Sidebar({ role, activePage, onNavigate, onLogout, userName, pendingCount = 0, pendingReturnsCount = 0 }: {
   role: SidebarRole; activePage: string;
   onNavigate: (page: string) => void;
   onLogout: () => void; userName: string;
   pendingCount?: number;
+  pendingReturnsCount?: number;
 }) {
   const initials = userName.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
   return (
@@ -472,6 +480,9 @@ function Sidebar({ role, activePage, onNavigate, onLogout, userName, pendingCoun
             <span className="flex-1 text-left">{item.label}</span>
             {item.id === "customers" && pendingCount > 0 && (
               <span className="w-5 h-5 bg-amber-400 text-[#1f2937] text-[10px] font-extrabold rounded-full flex items-center justify-center shrink-0">{pendingCount}</span>
+            )}
+            {item.id === "returns" && pendingReturnsCount > 0 && (
+              <span className="w-5 h-5 bg-amber-400 text-[#1f2937] text-[10px] font-extrabold rounded-full flex items-center justify-center shrink-0">{pendingReturnsCount}</span>
             )}
           </button>
         ))}
@@ -4427,13 +4438,14 @@ function CustomerBrowse({ products, categories = CATEGORIES }: { products: Produ
 
 // ─── Customer History ─────────────────────────────────────────────────────────
 
-function CustomerHistory() {
+function CustomerHistory({ onNavigate }: { onNavigate?: (page: CustomerPage) => void }) {
   const [myTrx, setMyTrx] = useState<TransactionItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<TransactionItem | null>(null);
   const [selectedItems, setSelectedItems] = useState<Array<{ name: string; qty: number; price: number }>>([]);
   const [showAllModal, setShowAllModal] = useState(false);
   const [allSearch, setAllSearch] = useState("");
+  const [returnTxId, setReturnTxId] = useState<number | null>(null);
 
   const loadHistory = useCallback(async () => {
     setLoading(true);
@@ -4528,7 +4540,12 @@ function CustomerHistory() {
               </div>
               <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground pt-3 border-t border-border">
                 <span style={{ fontFamily: "'DM Mono', monospace" }}>Cash: {peso(Number(t.cash_tendered))} · Change: {peso(Number(t.change_amount))}</span>
-                <button onClick={() => handleSelectReceipt(t)} className="text-emerald-600 font-bold hover:underline">View Receipt</button>
+                <div className="flex items-center gap-3">
+                  <button onClick={() => setReturnTxId(t.id)} className="text-amber-600 font-bold hover:underline flex items-center gap-1 cursor-pointer">
+                    <RotateCcw size={12} /> Return Items
+                  </button>
+                  <button onClick={() => handleSelectReceipt(t)} className="text-emerald-600 font-bold hover:underline cursor-pointer">View Receipt</button>
+                </div>
               </div>
             </div>
           ))}
@@ -4625,7 +4642,15 @@ function CustomerHistory() {
                         <td className="px-4 py-3 text-right text-sm font-extrabold text-gray-900" style={{ fontFamily: "'DM Mono', monospace" }}>{peso(Number(t.total_amount))}</td>
                         <td className="px-4 py-3 text-center"><Badge variant="success">Completed</Badge></td>
                         <td className="px-4 py-3 text-right">
-                          <button onClick={() => handleSelectReceipt(t)} className="px-3 py-1.5 text-xs font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors">View Receipt</button>
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => { setShowAllModal(false); setReturnTxId(t.id); }}
+                              className="px-2.5 py-1.5 text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                            >
+                              <RotateCcw size={12} /> Return
+                            </button>
+                            <button onClick={() => handleSelectReceipt(t)} className="px-3 py-1.5 text-xs font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors cursor-pointer">View Receipt</button>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -4680,11 +4705,36 @@ function CustomerHistory() {
               </div>
               <p className="text-center text-xs text-muted-foreground border-t border-dashed pt-3">Thank you for shopping at SmartMart!</p>
             </div>
-            <div className="p-4">
-              <button onClick={() => { setSelected(null); setSelectedItems([]); }} className="w-full py-2.5 bg-emerald-600 text-white rounded-2xl text-sm font-bold hover:bg-emerald-700 transition-colors">Close</button>
+            <div className="p-4 flex gap-2">
+              <button
+                onClick={() => {
+                  const id = selected.id;
+                  setSelected(null);
+                  setSelectedItems([]);
+                  setReturnTxId(id);
+                }}
+                className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+              >
+                <RotateCcw size={14} /> Return Items
+              </button>
+              <button onClick={() => { setSelected(null); setSelectedItems([]); }} className="flex-1 py-2.5 bg-emerald-600 text-white rounded-2xl text-xs font-bold hover:bg-emerald-700 transition-colors cursor-pointer">Close</button>
             </div>
           </div>
         </div>
+      )}
+
+      {/* Request Return Modal */}
+      {returnTxId !== null && (
+        <RequestReturnModal
+          transactionId={returnTxId}
+          onClose={() => setReturnTxId(null)}
+          onSuccess={() => {
+            setReturnTxId(null);
+            loadHistory();
+            if (onNavigate) onNavigate("returns");
+          }}
+          customerTransactions={myTrx}
+        />
       )}
     </div>
   );
@@ -6192,10 +6242,23 @@ function AdminSettingsPage() {
 function AdminLayout({ onLogout }: { onLogout: () => void }) {
   const [page, setPage] = useState<AdminPage>("dashboard");
   const { products, categories, catMeta, addProduct: handleAddProduct, addCategory: handleAddCategory, pendingCustomers } = useStore();
+  const [pendingReturns, setPendingReturns] = useState(0);
+
+  const fetchPendingReturns = useCallback(() => {
+    api.returns.getAll({ status: "Pending" })
+      .then(res => setPendingReturns(Number(res.summary?.pending_count || 0)))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetchPendingReturns();
+    const interval = setInterval(fetchPendingReturns, 30000);
+    return () => clearInterval(interval);
+  }, [fetchPendingReturns]);
 
   const PAGE_LABELS: Record<AdminPage, string> = {
     dashboard: "Dashboard", products: "Products", categories: "Categories",
-    inventory: "Inventory", sales: "Sales", customers: "Customers",
+    inventory: "Inventory", sales: "Sales", returns: "Product Returns", customers: "Customers",
     staff: "Staff", reports: "Reports", settings: "Settings",
   };
 
@@ -6206,6 +6269,7 @@ function AdminLayout({ onLogout }: { onLogout: () => void }) {
       case "categories": return <AdminCategoriesPage products={products} categories={categories} catMeta={catMeta} onAddCategory={handleAddCategory} />;
       case "inventory": return <InventoryPage products={products} categories={categories} catMeta={catMeta} />;
       case "sales": return <AdminSalesPage />;
+      case "returns": return <ReturnsManagement role="admin" onReturnsUpdated={fetchPendingReturns} />;
       case "staff": return <AdminStaffPage />;
       case "customers": return <CustomersPage />;
       case "reports": return <ReportsPage />;
@@ -6215,7 +6279,7 @@ function AdminLayout({ onLogout }: { onLogout: () => void }) {
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#f9fafb]">
-      <Sidebar role="admin" activePage={page} onNavigate={p => setPage(p as AdminPage)} onLogout={onLogout} userName="Admin User" pendingCount={pendingCustomers.length} />
+      <Sidebar role="admin" activePage={page} onNavigate={p => setPage(p as AdminPage)} onLogout={onLogout} userName="Admin User" pendingCount={pendingCustomers.length} pendingReturnsCount={pendingReturns} />
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         {/* Top bar */}
         <header className="h-14 border-b border-gray-200 bg-white flex items-center justify-between px-5 shrink-0 shadow-sm">
@@ -6239,22 +6303,36 @@ function StaffLayout({ onLogout }: { onLogout: () => void }) {
   const { products, categories } = useStore();
   const user = getSavedUser();
   const displayName = user?.name || "Staff";
+  const [pendingReturns, setPendingReturns] = useState(0);
+
+  const fetchPendingReturns = useCallback(() => {
+    api.returns.getAll({ status: "Pending" })
+      .then(res => setPendingReturns(Number(res.summary?.pending_count || 0)))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetchPendingReturns();
+    const interval = setInterval(fetchPendingReturns, 30000);
+    return () => clearInterval(interval);
+  }, [fetchPendingReturns]);
 
   const renderPage = () => {
     switch (page) {
       case "dashboard": return <StaffDashboard onNavigate={p => setPage(p)} products={products} />;
       case "pos": return <POSPage products={products} categories={categories} />;
       case "transactions": return <TransactionsPage />;
+      case "returns": return <ReturnsManagement role="staff" onReturnsUpdated={fetchPendingReturns} />;
       case "profile": return <StaffProfile />;
     }
   };
 
   return (
     <div className="flex h-screen overflow-hidden">
-      <Sidebar role="staff" activePage={page} onNavigate={p => setPage(p as StaffPage)} onLogout={onLogout} userName={displayName} />
+      <Sidebar role="staff" activePage={page} onNavigate={p => setPage(p as StaffPage)} onLogout={onLogout} userName={displayName} pendingReturnsCount={pendingReturns} />
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <header className="h-14 border-b border-border bg-card flex items-center justify-between px-5 shrink-0">
-          <span className="text-sm font-extrabold text-foreground">{page === "pos" ? "Point of Sale" : page === "transactions" ? "Today's Transactions" : page === "profile" ? "My Profile" : "Staff Dashboard"}</span>
+          <span className="text-sm font-extrabold text-foreground">{page === "pos" ? "Point of Sale" : page === "transactions" ? "Today's Transactions" : page === "returns" ? "Product Returns" : page === "profile" ? "My Profile" : "Staff Dashboard"}</span>
           <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center text-white text-sm font-extrabold">{displayName.charAt(0)}</div>
         </header>
         <main className={`flex-1 min-h-0 ${page === "pos" ? "overflow-hidden flex" : "overflow-y-auto scrollbar-hide"}`}>{renderPage()}</main>
@@ -6272,7 +6350,8 @@ function CustomerLayout({ onLogout }: { onLogout: () => void }) {
   const renderPage = () => {
     switch (page) {
       case "browse": return <CustomerBrowse products={products} categories={categories} />;
-      case "history": return <CustomerHistory />;
+      case "history": return <CustomerHistory onNavigate={p => setPage(p)} />;
+      case "returns": return <CustomerReturns />;
       case "profile": return <CustomerProfile />;
     }
   };
@@ -6282,7 +6361,9 @@ function CustomerLayout({ onLogout }: { onLogout: () => void }) {
       <Sidebar role="customer" activePage={page} onNavigate={p => setPage(p as CustomerPage)} onLogout={onLogout} userName={userName} />
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <header className="h-14 border-b border-border bg-card flex items-center justify-between px-5 shrink-0">
-          <span className="text-sm font-extrabold text-foreground">SmartMart Customer Portal</span>
+          <span className="text-sm font-extrabold text-foreground">
+            {page === "browse" ? "SmartMart Browse Catalog" : page === "history" ? "Purchase History" : page === "returns" ? "Product Returns & Refunds" : "Customer Profile"}
+          </span>
           <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center text-white text-sm font-extrabold">
             {userName.charAt(0)}
           </div>
