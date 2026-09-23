@@ -92,6 +92,30 @@ export interface TransactionItem {
   cash_tendered: number | string;
   change_amount: number | string;
   date: string;
+  items?: Array<{
+    id: number;
+    product_id: number;
+    product_name: string;
+    unit_price: number | string;
+    quantity: number;
+    purchased_quantity?: number;
+    already_returned?: number;
+    available_quantity?: number;
+    is_returnable?: boolean;
+    is_fully_returned?: boolean;
+  }>;
+  returnable_items?: Array<{
+    id: number;
+    product_id: number;
+    product_name: string;
+    unit_price: number | string;
+    quantity: number;
+    available_quantity?: number;
+  }>;
+  is_fully_returned?: boolean;
+  has_returned_items?: boolean;
+  items_summary?: string;
+  returnable_items_summary?: string;
 }
 
 export interface BestSellerItem {
@@ -319,6 +343,8 @@ export const api = {
     },
     getMyHistory: (): Promise<TransactionItem[]> => request<TransactionItem[]>("/transactions/my-history"),
     getItems: (id: number | string) => request(`/transactions/${id}/items`),
+    getCustomerTransactions: (customerId: number | string): Promise<TransactionItem[]> =>
+      request<TransactionItem[]>(`/transactions/customer/${customerId}`),
     create: (data: {
       customer_id?: number | null;
       cashier_id: number;
@@ -428,11 +454,8 @@ export const api = {
     },
   },
 
-  // Returns & Refunds
+  // Returns & Refunds (Staff/Admin only)
   returns: {
-    getMyReturns: (): Promise<ProductReturn[]> =>
-      request<ProductReturn[]>("/returns/my-returns"),
-
     getReturnableItems: (transactionId: number | string): Promise<ReturnableItemsResponse> =>
       request<ReturnableItemsResponse>(`/returns/transaction/${transactionId}/returnable-items`),
 
@@ -449,6 +472,12 @@ export const api = {
     getById: (id: number | string): Promise<ProductReturn> =>
       request<ProductReturn>(`/returns/${id}`),
 
+    getMyHistory: (): Promise<ProductReturn[]> =>
+      request<ProductReturn[]>("/returns/my-history"),
+
+    getCustomerReturns: (customerId: number | string): Promise<ProductReturn[]> =>
+      request<ProductReturn[]>(`/returns/customer/${customerId}`),
+
     create: (data: CreateReturnPayload): Promise<{ message: string; return_id: number; return_no: string; refund_amount: number }> =>
       request("/returns", {
         method: "POST",
@@ -462,11 +491,6 @@ export const api = {
       request(`/returns/${id}/status`, {
         method: "PATCH",
         body: JSON.stringify(data),
-      }),
-
-    cancel: (id: number | string): Promise<{ message: string }> =>
-      request(`/returns/${id}/cancel`, {
-        method: "POST",
       }),
   },
 };
@@ -495,6 +519,7 @@ export interface ProductReturn {
   customer_name?: string;
   customer_code?: string;
   customer_phone?: string;
+  cashier_name?: string;
   status: ReturnStatus;
   reason: string;
   customer_notes?: string | null;
@@ -518,6 +543,7 @@ export interface ReturnableItem {
   already_returned: number;
   available_quantity: number;
   is_returnable: boolean;
+  current_stock?: number;
 }
 
 export interface ReturnableItemsResponse {
@@ -525,6 +551,8 @@ export interface ReturnableItemsResponse {
     id: number;
     receipt_no: string;
     customer_id: number;
+    customer_name?: string;
+    cashier_name?: string;
     total_amount: number | string;
     date: string;
   };
@@ -547,6 +575,9 @@ export interface CreateReturnPayload {
   transaction_id: number;
   reason: string;
   customer_notes?: string;
+  status?: "Completed" | "Approved" | "Rejected" | "Pending";
+  admin_notes?: string;
+  restock?: boolean;
   items: Array<{
     transaction_item_id: number;
     quantity: number;

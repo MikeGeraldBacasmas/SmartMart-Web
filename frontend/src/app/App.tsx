@@ -4,9 +4,8 @@ import { Toaster, toast } from "sonner";
 import { api, getSavedUser, UserPayload, RegisteredCustomer, CustomerProfileData, StaffProfileData, DashboardSummary, TransactionItem, StaffItem } from "../api";
 import logoImg from "../assets/SmartMart_Logo.jpg";
 import ReportsPage from "./components/reports/ReportsPage";
-import CustomerReturns from "./components/returns/CustomerReturns";
 import ReturnsManagement from "./components/returns/ReturnsManagement";
-import RequestReturnModal from "./components/returns/RequestReturnModal";
+import CustomerReturnHistoryView from "./components/returns/CustomerReturnHistoryView";
 import {
   LayoutDashboard, Package, ShoppingCart, Users, BarChart3,
   LogOut, Search, Plus, Minus, Trash2, Bell, AlertTriangle,
@@ -28,7 +27,7 @@ export const getProductImageUrl = (url?: string | null) => {
 type Role = "login" | "admin" | "staff" | "customer";
 type AdminPage = "dashboard" | "products" | "inventory" | "categories" | "sales" | "returns" | "customers" | "staff" | "reports" | "settings";
 type StaffPage = "dashboard" | "pos" | "transactions" | "returns" | "profile";
-type CustomerPage = "browse" | "history" | "returns" | "profile";
+type CustomerPage = "browse" | "history" | "returns-history" | "profile";
 
 interface Product {
   id: number;
@@ -431,7 +430,7 @@ const NAV_ITEMS: Record<SidebarRole, NavItem[]> = {
   customer: [
     { id: "browse", icon: <Store size={18} />, label: "Browse Products" },
     { id: "history", icon: <Receipt size={18} />, label: "Purchase History" },
-    { id: "returns", icon: <RotateCcw size={18} />, label: "Product Returns" },
+    { id: "returns-history", icon: <RotateCcw size={18} />, label: "Return History" },
     { id: "profile", icon: <User size={18} />, label: "My Profile" },
   ],
 };
@@ -4445,7 +4444,6 @@ function CustomerHistory({ onNavigate }: { onNavigate?: (page: CustomerPage) => 
   const [selectedItems, setSelectedItems] = useState<Array<{ name: string; qty: number; price: number }>>([]);
   const [showAllModal, setShowAllModal] = useState(false);
   const [allSearch, setAllSearch] = useState("");
-  const [returnTxId, setReturnTxId] = useState<number | null>(null);
 
   const loadHistory = useCallback(async () => {
     setLoading(true);
@@ -4540,12 +4538,7 @@ function CustomerHistory({ onNavigate }: { onNavigate?: (page: CustomerPage) => 
               </div>
               <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground pt-3 border-t border-border">
                 <span style={{ fontFamily: "'DM Mono', monospace" }}>Cash: {peso(Number(t.cash_tendered))} · Change: {peso(Number(t.change_amount))}</span>
-                <div className="flex items-center gap-3">
-                  <button onClick={() => setReturnTxId(t.id)} className="text-amber-600 font-bold hover:underline flex items-center gap-1 cursor-pointer">
-                    <RotateCcw size={12} /> Return Items
-                  </button>
-                  <button onClick={() => handleSelectReceipt(t)} className="text-emerald-600 font-bold hover:underline cursor-pointer">View Receipt</button>
-                </div>
+                <button onClick={() => handleSelectReceipt(t)} className="text-emerald-600 font-bold hover:underline cursor-pointer">View Receipt</button>
               </div>
             </div>
           ))}
@@ -4642,13 +4635,7 @@ function CustomerHistory({ onNavigate }: { onNavigate?: (page: CustomerPage) => 
                         <td className="px-4 py-3 text-right text-sm font-extrabold text-gray-900" style={{ fontFamily: "'DM Mono', monospace" }}>{peso(Number(t.total_amount))}</td>
                         <td className="px-4 py-3 text-center"><Badge variant="success">Completed</Badge></td>
                         <td className="px-4 py-3 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => { setShowAllModal(false); setReturnTxId(t.id); }}
-                              className="px-2.5 py-1.5 text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
-                            >
-                              <RotateCcw size={12} /> Return
-                            </button>
+                          <div className="flex items-center justify-end">
                             <button onClick={() => handleSelectReceipt(t)} className="px-3 py-1.5 text-xs font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors cursor-pointer">View Receipt</button>
                           </div>
                         </td>
@@ -4705,36 +4692,11 @@ function CustomerHistory({ onNavigate }: { onNavigate?: (page: CustomerPage) => 
               </div>
               <p className="text-center text-xs text-muted-foreground border-t border-dashed pt-3">Thank you for shopping at SmartMart!</p>
             </div>
-            <div className="p-4 flex gap-2">
-              <button
-                onClick={() => {
-                  const id = selected.id;
-                  setSelected(null);
-                  setSelectedItems([]);
-                  setReturnTxId(id);
-                }}
-                className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
-              >
-                <RotateCcw size={14} /> Return Items
-              </button>
-              <button onClick={() => { setSelected(null); setSelectedItems([]); }} className="flex-1 py-2.5 bg-emerald-600 text-white rounded-2xl text-xs font-bold hover:bg-emerald-700 transition-colors cursor-pointer">Close</button>
+            <div className="p-4">
+              <button onClick={() => { setSelected(null); setSelectedItems([]); }} className="w-full py-2.5 bg-emerald-600 text-white rounded-2xl text-xs font-bold hover:bg-emerald-700 transition-colors cursor-pointer">Close</button>
             </div>
           </div>
         </div>
-      )}
-
-      {/* Request Return Modal */}
-      {returnTxId !== null && (
-        <RequestReturnModal
-          transactionId={returnTxId}
-          onClose={() => setReturnTxId(null)}
-          onSuccess={() => {
-            setReturnTxId(null);
-            loadHistory();
-            if (onNavigate) onNavigate("returns");
-          }}
-          customerTransactions={myTrx}
-        />
       )}
     </div>
   );
@@ -6351,7 +6313,7 @@ function CustomerLayout({ onLogout }: { onLogout: () => void }) {
     switch (page) {
       case "browse": return <CustomerBrowse products={products} categories={categories} />;
       case "history": return <CustomerHistory onNavigate={p => setPage(p)} />;
-      case "returns": return <CustomerReturns />;
+      case "returns-history": return <CustomerReturnHistoryView />;
       case "profile": return <CustomerProfile />;
     }
   };
@@ -6362,7 +6324,7 @@ function CustomerLayout({ onLogout }: { onLogout: () => void }) {
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <header className="h-14 border-b border-border bg-card flex items-center justify-between px-5 shrink-0">
           <span className="text-sm font-extrabold text-foreground">
-            {page === "browse" ? "SmartMart Browse Catalog" : page === "history" ? "Purchase History" : page === "returns" ? "Product Returns & Refunds" : "Customer Profile"}
+            {page === "browse" ? "SmartMart Browse Catalog" : page === "history" ? "Purchase History" : page === "returns-history" ? "Return History" : "Customer Profile"}
           </span>
           <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center text-white text-sm font-extrabold">
             {userName.charAt(0)}
