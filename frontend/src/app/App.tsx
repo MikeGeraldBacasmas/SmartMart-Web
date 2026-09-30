@@ -4,6 +4,9 @@ import { Toaster, toast } from "sonner";
 import { api, getSavedUser, UserPayload, RegisteredCustomer, CustomerProfileData, StaffProfileData, DashboardSummary, TransactionItem, StaffItem } from "../api";
 import logoImg from "../assets/SmartMart_Logo.jpg";
 import ReportsPage from "./components/reports/ReportsPage";
+import ReturnsManagement from "./components/returns/ReturnsManagement";
+import CustomerReturnHistoryView from "./components/returns/CustomerReturnHistoryView";
+import CustomerAnalytics from "./components/analytics/CustomerAnalytics";
 import {
   LayoutDashboard, Package, ShoppingCart, Users, BarChart3,
   LogOut, Search, Plus, Minus, Trash2, Bell, AlertTriangle,
@@ -11,6 +14,7 @@ import {
   Receipt, Settings, Printer, ChevronRight, ShieldCheck, Pencil,
   Eye, EyeOff, Filter, Upload, Image as ImageIcon, Camera, Download,
   Flame, Sparkles, ArrowRight, Award, ArrowLeft, ChevronUp, ChevronDown, List,
+  RotateCcw, Percent, Check, AlertCircle,
 } from "lucide-react";
 
 export const getProductImageUrl = (url?: string | null) => {
@@ -22,9 +26,9 @@ export const getProductImageUrl = (url?: string | null) => {
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Role = "login" | "admin" | "staff" | "customer";
-type AdminPage = "dashboard" | "products" | "inventory" | "categories" | "sales" | "customers" | "staff" | "reports" | "settings";
-type StaffPage = "dashboard" | "pos" | "transactions" | "profile";
-type CustomerPage = "browse" | "history" | "profile";
+type AdminPage = "dashboard" | "products" | "inventory" | "categories" | "sales" | "returns" | "customers" | "staff" | "reports" | "settings";
+type StaffPage = "dashboard" | "pos" | "transactions" | "returns" | "profile";
+type CustomerPage = "browse" | "history" | "analytics" | "returns-history" | "profile";
 
 interface Product {
   id: number;
@@ -47,6 +51,10 @@ interface Transaction {
   customer: string;
   customerId?: string;
   items: Array<{ name: string; qty: number; price: number }>;
+  subtotal?: number;
+  discountType?: "None" | "Senior Citizen" | "PWD";
+  discountIdNo?: string;
+  discountAmount?: number;
   total: number;
   cash: number;
   change: number;
@@ -411,6 +419,7 @@ const NAV_ITEMS: Record<SidebarRole, NavItem[]> = {
     { id: "categories", icon: <ClipboardList size={18} />, label: "Categories" },
     { id: "inventory", icon: <BarChart3 size={18} />, label: "Inventory" },
     { id: "sales", icon: <ShoppingCart size={18} />, label: "Sales" },
+    { id: "returns", icon: <RotateCcw size={18} />, label: "Returns" },
     { id: "customers", icon: <User size={18} />, label: "Customers" },
     { id: "staff", icon: <Users size={18} />, label: "Staff" },
     { id: "reports", icon: <TrendingUp size={18} />, label: "Reports" },
@@ -420,11 +429,14 @@ const NAV_ITEMS: Record<SidebarRole, NavItem[]> = {
     { id: "dashboard", icon: <LayoutDashboard size={18} />, label: "Dashboard" },
     { id: "pos", icon: <ShoppingCart size={18} />, label: "Point of Sale" },
     { id: "transactions", icon: <Receipt size={18} />, label: "Transactions" },
+    { id: "returns", icon: <RotateCcw size={18} />, label: "Returns" },
     { id: "profile", icon: <User size={18} />, label: "My Profile" },
   ],
   customer: [
     { id: "browse", icon: <Store size={18} />, label: "Browse Products" },
     { id: "history", icon: <Receipt size={18} />, label: "Purchase History" },
+    { id: "analytics", icon: <TrendingUp size={18} />, label: "Spending Analytics" },
+    { id: "returns-history", icon: <RotateCcw size={18} />, label: "Return History" },
     { id: "profile", icon: <User size={18} />, label: "My Profile" },
   ],
 };
@@ -435,11 +447,12 @@ const ROLE_LABELS: Record<SidebarRole, string> = {
   customer: "Customer",
 };
 
-function Sidebar({ role, activePage, onNavigate, onLogout, userName, pendingCount = 0 }: {
+function Sidebar({ role, activePage, onNavigate, onLogout, userName, pendingCount = 0, pendingReturnsCount = 0 }: {
   role: SidebarRole; activePage: string;
   onNavigate: (page: string) => void;
   onLogout: () => void; userName: string;
   pendingCount?: number;
+  pendingReturnsCount?: number;
 }) {
   const initials = userName.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
   return (
@@ -472,6 +485,9 @@ function Sidebar({ role, activePage, onNavigate, onLogout, userName, pendingCoun
             <span className="flex-1 text-left">{item.label}</span>
             {item.id === "customers" && pendingCount > 0 && (
               <span className="w-5 h-5 bg-amber-400 text-[#1f2937] text-[10px] font-extrabold rounded-full flex items-center justify-center shrink-0">{pendingCount}</span>
+            )}
+            {item.id === "returns" && pendingReturnsCount > 0 && (
+              <span className="w-5 h-5 bg-amber-400 text-[#1f2937] text-[10px] font-extrabold rounded-full flex items-center justify-center shrink-0">{pendingReturnsCount}</span>
             )}
           </button>
         ))}
@@ -687,6 +703,8 @@ function RegisterPage({ onLogin: _onLogin, onBack, onGoLogin }: { onLogin: (role
   const [civilStatus, setCivilStatus] = useState("");
   const [gender, setGender] = useState("");
   const [phone, setPhone] = useState("");
+  const [discountType, setDiscountType] = useState<"None" | "Senior Citizen" | "PWD">("None");
+  const [discountIdNo, setDiscountIdNo] = useState("");
 
   const inputCls = "w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#22c55e]/30 focus:border-[#22c55e] transition-all";
   const selectCls = `${inputCls} text-[#1f2937]`;
@@ -730,6 +748,10 @@ function RegisterPage({ onLogin: _onLogin, onBack, onGoLogin }: { onLogin: (role
     else if (phone.trim().length !== 11) errors.phone = "Phone number must be exactly 11 digits (e.g. 09XXXXXXXXX).";
     else if (!phone.trim().startsWith("09")) errors.phone = "Phone number must start with 09 (e.g. 09XXXXXXXXX).";
 
+    if (discountType !== "None" && !discountIdNo.trim()) {
+      errors.discountIdNo = `${discountType} ID number is required to verify eligibility.`;
+    }
+
     setFormErrors(errors);
     if (Object.keys(errors).length > 0) {
       toast.error("Please fill in all required fields correctly before submitting.");
@@ -747,6 +769,8 @@ function RegisterPage({ onLogin: _onLogin, onBack, onGoLogin }: { onLogin: (role
         civil_status: civilStatus,
         gender,
         phone: phone.trim(),
+        discount_type: discountType,
+        discount_id_no: discountType !== "None" ? discountIdNo.trim() : undefined,
       });
       addPendingCustomer({
         id: String(res.customer_id),
@@ -899,6 +923,63 @@ function RegisterPage({ onLogin: _onLogin, onBack, onGoLogin }: { onLogin: (role
                       <p className="text-xs text-gray-400 mt-1">Philippine mobile number (11 digits starting with 09)</p>
                     )}
                   </div>
+                </div>
+
+                <div className="pt-2 border-t border-gray-100">
+                  <label className="block text-sm font-semibold text-[#1f2937] mb-1.5">
+                    Discount Eligibility (Senior Citizen / PWD)
+                  </label>
+                  <p className="text-xs text-gray-500 mb-2.5">
+                    Senior Citizens and Persons with Disabilities (PWD) receive a 5% discount on purchases.
+                  </p>
+                  <div className="grid grid-cols-3 gap-2 mb-2">
+                    {(["None", "Senior Citizen", "PWD"] as const).map(type => (
+                      <button
+                        key={type}
+                        type="button"
+                        onClick={() => {
+                          setDiscountType(type);
+                          if (type === "None") setDiscountIdNo("");
+                          setFormErrors(prev => ({ ...prev, discountIdNo: "" }));
+                        }}
+                        className={`py-2 px-3 rounded-xl text-xs font-bold transition-all border text-center ${
+                          discountType === type
+                            ? "bg-emerald-50 border-emerald-500 text-emerald-700 shadow-sm"
+                            : "bg-white border-gray-200 text-gray-600 hover:border-gray-300"
+                        }`}
+                      >
+                        {type === "Senior Citizen" ? "Senior Citizen" : type}
+                      </button>
+                    ))}
+                  </div>
+                  {discountType !== "None" && (
+                    <div className="mt-2.5">
+                      <label className="block text-xs font-semibold text-[#1f2937] mb-1">
+                        {discountType === "Senior Citizen" ? "OSCA / Senior Citizen ID No." : "PWD ID No."}{" "}
+                        <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        value={discountIdNo}
+                        onChange={e => {
+                          setDiscountIdNo(e.target.value);
+                          setFormErrors(prev => ({ ...prev, discountIdNo: "" }));
+                        }}
+                        placeholder={
+                          discountType === "Senior Citizen"
+                            ? "Enter OSCA / Senior Citizen ID No."
+                            : "Enter PWD ID No."
+                        }
+                        className={`${inputCls} font-mono ${formErrors.discountIdNo ? "border-red-400 ring-2 ring-red-400/30" : ""}`}
+                      />
+                      {formErrors.discountIdNo ? (
+                        <p className="text-xs text-red-500 font-medium mt-1">{formErrors.discountIdNo}</p>
+                      ) : (
+                        <p className="text-[11px] text-gray-400 mt-1">
+                          Your ID number will be verified at checkout to automatically apply your 5% discount.
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <p className="text-xs text-gray-400 pt-1">Fields marked with <span className="text-red-500">*</span> are required.</p>
@@ -2976,6 +3057,48 @@ function CustomersPage() {
   const [showViewCustPw, setShowViewCustPw] = useState(false);
   const [custCredsMap, setCustCredsMap] = useState<Record<string, string>>({});
 
+  // Customer discount editing in admin view
+  const [editingCustDiscount, setEditingCustDiscount] = useState(false);
+  const [custDiscountType, setCustDiscountType] = useState<"None" | "Senior Citizen" | "PWD">("None");
+  const [custDiscountId, setCustDiscountId] = useState("");
+  const [savingCustDiscount, setSavingCustDiscount] = useState(false);
+
+  const openViewingCustomer = (c: RegisteredCustomer) => {
+    setViewingCustomer(c);
+    setShowViewCustPw(false);
+    setEditingCustDiscount(false);
+    setCustDiscountType((c.discount_type as any) || "None");
+    setCustDiscountId(c.discount_id_no || "");
+  };
+
+  const handleSaveCustomerDiscount = async () => {
+    if (!viewingCustomer) return;
+    if (custDiscountType !== "None" && !custDiscountId.trim()) {
+      toast.error(`${custDiscountType} ID number is required.`);
+      return;
+    }
+    setSavingCustDiscount(true);
+    try {
+      await api.customers.updateDiscount(viewingCustomer.id, {
+        discount_type: custDiscountType,
+        discount_id_no: custDiscountType !== "None" ? custDiscountId.trim() : null,
+      });
+      const updated = {
+        ...viewingCustomer,
+        discount_type: custDiscountType,
+        discount_id_no: custDiscountType !== "None" ? custDiscountId.trim() : null,
+      };
+      setViewingCustomer(updated);
+      setEditingCustDiscount(false);
+      toast.success("Customer discount status updated successfully!");
+      await refreshData();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update discount status.");
+    } finally {
+      setSavingCustDiscount(false);
+    }
+  };
+
   const handleApprove = async () => {
     if (!newEmail.trim()) { toast.error("Please enter a username."); return; }
     if (!newPw.trim()) { toast.error("Please enter a temporary password."); return; }
@@ -3046,7 +3169,14 @@ function CustomersPage() {
                         <span className="text-purple-700 font-bold text-sm">{c.full_name.charAt(0)}</span>
                       </div>
                       <div>
-                        <p className="text-sm font-semibold text-foreground">{c.full_name}</p>
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-sm font-semibold text-foreground">{c.full_name}</p>
+                          {(c.discount_type === "Senior Citizen" || c.discount_type === "PWD") && (
+                            <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-700 border border-emerald-200">
+                              {c.discount_type === "Senior Citizen" ? "Senior" : "PWD"}
+                            </span>
+                          )}
+                        </div>
                         <p className="text-xs text-muted-foreground">@{c.username}</p>
                       </div>
                     </div>
@@ -3057,7 +3187,7 @@ function CustomersPage() {
                   <td className="px-4 py-3 text-sm text-muted-foreground">{c.joined}</td>
                   <td className="px-4 py-3 text-center">
                     <button
-                      onClick={() => { setViewingCustomer(c); setShowViewCustPw(false); }}
+                      onClick={() => openViewingCustomer(c)}
                       className="px-4 py-1.5 text-xs font-bold rounded-xl border-2 border-blue-500 bg-blue-500 text-white hover:bg-blue-600 hover:border-blue-600 transition-all shadow-sm"
                     >
                       View
@@ -3150,8 +3280,8 @@ function CustomersPage() {
       {/* View Customer Credentials Modal */}
       {viewingCustomer && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-card rounded-2xl border border-border p-6 w-full max-w-md shadow-2xl">
-            <div className="flex items-center justify-between mb-5">
+          <div className="bg-card rounded-2xl border border-border p-6 w-full max-w-2xl shadow-2xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between pb-4 border-b border-border shrink-0">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center">
                   <User size={20} className="text-purple-600" />
@@ -3163,61 +3293,160 @@ function CustomersPage() {
               </div>
               <button onClick={() => setViewingCustomer(null)} className="p-1.5 hover:bg-muted rounded-lg transition-colors"><X size={18} /></button>
             </div>
-            <div className="space-y-3">
-              <div className="p-4 bg-background rounded-xl border border-border">
-                <p className="text-xs text-muted-foreground font-medium mb-1">Full Name</p>
-                <p className="font-bold text-foreground">{viewingCustomer.full_name}</p>
+
+            <div className="overflow-y-auto py-4 space-y-3.5 pr-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="p-3.5 bg-background rounded-xl border border-border">
+                  <p className="text-xs text-muted-foreground font-medium mb-1">Full Name</p>
+                  <p className="font-bold text-foreground text-sm">{viewingCustomer.full_name}</p>
+                </div>
+                <div className="p-3.5 bg-background rounded-xl border border-border">
+                  <p className="text-xs text-muted-foreground font-medium mb-1">Customer Code</p>
+                  <p className="font-bold text-foreground font-mono text-sm">{viewingCustomer.customer_code}</p>
+                </div>
               </div>
-              <div className="p-4 bg-background rounded-xl border border-border">
-                <p className="text-xs text-muted-foreground font-medium mb-1">Customer Code</p>
-                <p className="font-bold text-foreground font-mono">{viewingCustomer.customer_code}</p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="p-3.5 bg-background rounded-xl border border-border">
+                  <p className="text-xs text-muted-foreground font-medium mb-1">Username</p>
+                  <p className="font-bold text-foreground font-mono text-sm">{viewingCustomer.username}</p>
+                </div>
+                <div className="p-3.5 bg-background rounded-xl border border-border">
+                  <p className="text-xs text-muted-foreground font-medium mb-1">Temporary Password (Initial)</p>
+                  {(viewingCustomer.temp_password || custCredsMap[viewingCustomer.username]) ? (
+                    <div className="flex items-center gap-2">
+                      <p className="font-bold text-foreground font-mono flex-1 text-sm">
+                        {showViewCustPw ? (viewingCustomer.temp_password || custCredsMap[viewingCustomer.username]) : "••••••••"}
+                      </p>
+                      <button type="button" onClick={() => setShowViewCustPw(v => !v)} className="text-muted-foreground hover:text-foreground transition-colors p-1">
+                        {showViewCustPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-400 italic">No temporary password recorded</p>
+                  )}
+                </div>
               </div>
-              <div className="p-4 bg-background rounded-xl border border-border">
-                <p className="text-xs text-muted-foreground font-medium mb-1">Username</p>
-                <p className="font-bold text-foreground font-mono">{viewingCustomer.username}</p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="p-3.5 bg-background rounded-xl border border-border">
+                  <p className="text-xs text-muted-foreground font-medium mb-1">Phone</p>
+                  <p className="font-semibold text-foreground text-sm" style={{ fontFamily: "'DM Mono', monospace" }}>{viewingCustomer.phone || "—"}</p>
+                </div>
+                <div className="p-3.5 bg-background rounded-xl border border-border">
+                  <p className="text-xs text-muted-foreground font-medium mb-1">Member Since</p>
+                  <p className="font-semibold text-foreground text-sm">{viewingCustomer.joined || "—"}</p>
+                </div>
               </div>
-              <div className="p-4 bg-background rounded-xl border border-border">
-                <p className="text-xs text-muted-foreground font-medium mb-1">Temporary Password (Initial)</p>
-                {(viewingCustomer.temp_password || custCredsMap[viewingCustomer.username]) ? (
-                  <div className="flex items-center gap-2">
-                    <p className="font-bold text-foreground font-mono flex-1">
-                      {showViewCustPw ? (viewingCustomer.temp_password || custCredsMap[viewingCustomer.username]) : "••••••••"}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="p-3.5 bg-background rounded-xl border border-border">
+                  <p className="text-xs text-muted-foreground font-medium mb-1">Gender</p>
+                  <p className="font-semibold text-foreground text-sm">{viewingCustomer.gender || "—"}</p>
+                </div>
+                <div className="p-3.5 bg-background rounded-xl border border-border">
+                  <p className="text-xs text-muted-foreground font-medium mb-1">Civil Status</p>
+                  <p className="font-semibold text-foreground text-sm">{viewingCustomer.civil_status || "—"}</p>
+                </div>
+              </div>
+
+              <div className="p-3.5 bg-background rounded-xl border border-border">
+                <p className="text-xs text-muted-foreground font-medium mb-1">Address</p>
+                <p className="font-semibold text-foreground text-sm">{viewingCustomer.address || "—"}</p>
+              </div>
+
+              {/* Discount Category & Verification */}
+              <div className="p-4 bg-background rounded-xl border border-border space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-muted-foreground font-medium">Discount Category (Senior Citizen / PWD)</p>
+                    <p className="font-bold text-foreground text-sm mt-0.5">
+                      {viewingCustomer.discount_type && viewingCustomer.discount_type !== "None"
+                        ? `${viewingCustomer.discount_type} (5% Discount)`
+                        : "Regular Customer (None)"}
                     </p>
-                    <button type="button" onClick={() => setShowViewCustPw(v => !v)} className="text-muted-foreground hover:text-foreground transition-colors">
-                      {showViewCustPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingCustDiscount(v => !v);
+                      setCustDiscountType((viewingCustomer.discount_type as any) || "None");
+                      setCustDiscountId(viewingCustomer.discount_id_no || "");
+                    }}
+                    className="text-xs font-bold text-purple-600 hover:text-purple-700 bg-purple-50 hover:bg-purple-100 px-2.5 py-1 rounded-lg transition-colors border border-purple-200"
+                  >
+                    {editingCustDiscount ? "Cancel" : "Edit Discount"}
+                  </button>
+                </div>
+
+                {!editingCustDiscount ? (
+                  viewingCustomer.discount_id_no ? (
+                    <div className="flex items-center justify-between pt-1">
+                      <p className="text-xs text-emerald-700 font-mono font-bold bg-emerald-50 px-2 py-1 rounded border border-emerald-200">
+                        Verified ID: {viewingCustomer.discount_id_no}
+                      </p>
+                      <span className="text-[11px] font-bold text-emerald-600 flex items-center gap-1">
+                        <Check size={12} className="stroke-[3]" /> Auto-discount active at POS
+                      </span>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground italic pt-0.5">
+                      No Senior or PWD ID on file. You can register their ID here to enable auto-discounts.
+                    </p>
+                  )
+                ) : (
+                  <div className="pt-2 border-t border-border space-y-2.5">
+                    <div className="grid grid-cols-3 gap-1.5 p-1 bg-muted/60 rounded-xl">
+                      {(["None", "Senior Citizen", "PWD"] as const).map(type => (
+                        <button
+                          key={type}
+                          type="button"
+                          onClick={() => {
+                            setCustDiscountType(type);
+                            if (type === "None") setCustDiscountId("");
+                          }}
+                          className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all text-center ${
+                            custDiscountType === type
+                              ? "bg-white text-emerald-700 shadow-sm border border-emerald-200"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          {type === "Senior Citizen" ? "Senior" : type}
+                        </button>
+                      ))}
+                    </div>
+
+                    {custDiscountType !== "None" && (
+                      <div>
+                        <label className="block text-[11px] font-bold text-foreground mb-1">
+                          {custDiscountType === "Senior Citizen" ? "Senior Citizen ID No." : "PWD ID No."}{" "}
+                          <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={custDiscountId}
+                          onChange={e => setCustDiscountId(e.target.value)}
+                          placeholder="Enter verified ID number"
+                          className="w-full px-3 py-1.5 rounded-xl border border-border bg-card font-mono text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                        />
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      disabled={savingCustDiscount}
+                      onClick={handleSaveCustomerDiscount}
+                      className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors disabled:opacity-50"
+                    >
+                      {savingCustDiscount ? "Saving..." : "Save Discount Status"}
                     </button>
                   </div>
-                ) : (
-                  <p className="text-sm text-gray-400 italic">No temporary password recorded</p>
                 )}
               </div>
-              <div className="p-4 bg-background rounded-xl border border-border flex gap-4">
-                <div className="flex-1">
-                  <p className="text-xs text-muted-foreground font-medium mb-1">Phone</p>
-                  <p className="font-semibold text-foreground text-sm" style={{ fontFamily: "'DM Mono', monospace" }}>{viewingCustomer.phone}</p>
-                </div>
-                <div className="flex-1">
-                  <p className="text-xs text-muted-foreground font-medium mb-1">Member Since</p>
-                  <p className="font-semibold text-foreground text-sm">{viewingCustomer.joined}</p>
-                </div>
-              </div>
-              <div className="p-4 bg-background rounded-xl border border-border flex gap-4">
-                <div className="flex-1">
-                  <p className="text-xs text-muted-foreground font-medium mb-1">Gender</p>
-                  <p className="font-semibold text-foreground text-sm">{viewingCustomer.gender}</p>
-                </div>
-                <div className="flex-1">
-                  <p className="text-xs text-muted-foreground font-medium mb-1">Civil Status</p>
-                  <p className="font-semibold text-foreground text-sm">{viewingCustomer.civil_status}</p>
-                </div>
-              </div>
-              <div className="p-4 bg-background rounded-xl border border-border">
-                <p className="text-xs text-muted-foreground font-medium mb-1">Address</p>
-                <p className="font-semibold text-foreground text-sm">{viewingCustomer.address}</p>
-              </div>
-              <div className="pt-2">
-                <button onClick={() => setViewingCustomer(null)} className="w-full py-2.5 rounded-xl bg-[#1f2937] text-white text-sm font-bold hover:bg-[#374151] transition-colors">Close</button>
-              </div>
+            </div>
+
+            <div className="pt-3 border-t border-border shrink-0">
+              <button onClick={() => setViewingCustomer(null)} className="w-full py-2.5 rounded-xl bg-[#1f2937] text-white text-sm font-bold hover:bg-[#374151] transition-colors">Close</button>
             </div>
           </div>
         </div>
@@ -3241,6 +3470,36 @@ function POSPage({ products, categories = CATEGORIES }: { products: Product[]; c
   const [showReceipt, setShowReceipt] = useState(false);
   const [completedTrx, setCompletedTrx] = useState<Transaction | null>(null);
 
+  // Discount states (Senior Citizen / PWD)
+  const [discountType, setDiscountType] = useState<"None" | "Senior Citizen" | "PWD">("None");
+  const [discountIdNo, setDiscountIdNo] = useState("");
+  const [saveDiscountToProfile, setSaveDiscountToProfile] = useState(true);
+
+  // Automatically apply discount if linked customer is already registered as Senior Citizen or PWD
+  useEffect(() => {
+    if (linkedCustomer) {
+      if (
+        (linkedCustomer.discount_type === "Senior Citizen" || linkedCustomer.discount_type === "PWD") &&
+        linkedCustomer.discount_id_no
+      ) {
+        setDiscountType(linkedCustomer.discount_type);
+        setDiscountIdNo(linkedCustomer.discount_id_no);
+      } else {
+        setDiscountType("None");
+        setDiscountIdNo("");
+      }
+    } else {
+      setDiscountType("None");
+      setDiscountIdNo("");
+    }
+  }, [linkedCustomer]);
+
+  const isCustomerRegisteredDiscounted = Boolean(
+    linkedCustomer &&
+    (linkedCustomer.discount_type === "Senior Citizen" || linkedCustomer.discount_type === "PWD") &&
+    linkedCustomer.discount_id_no
+  );
+
   const filtered = useMemo(() =>
     products.filter(p => {
       const ms = p.name.toLowerCase().includes(search.toLowerCase());
@@ -3248,7 +3507,14 @@ function POSPage({ products, categories = CATEGORIES }: { products: Product[]; c
       return ms && mc && p.stock > 0;
     }), [products, search, category]);
 
-  const total = cart.reduce((s, i) => s + i.product.price * i.qty, 0);
+  // Calculations: Subtotal, 5% Senior/PWD discount, and net total
+  const subtotal = cart.reduce((s, i) => s + i.product.price * i.qty, 0);
+  const isDiscountActive =
+    (discountType === "Senior Citizen" || discountType === "PWD") &&
+    discountIdNo.trim().length > 0;
+  const discountRate = isDiscountActive ? 0.05 : 0;
+  const discountAmount = isDiscountActive ? Math.round(subtotal * discountRate * 100) / 100 : 0;
+  const total = Math.max(0, subtotal - discountAmount);
   const cash = parseFloat(cashAmount) || 0;
   const change = Math.max(0, cash - total);
   const canComplete = cart.length > 0 && cash >= total;
@@ -3282,6 +3548,10 @@ function POSPage({ products, categories = CATEGORIES }: { products: Product[]; c
         cashier_id: getSavedUser()?.id || 1,
         cash_tendered: cash,
         items: apiItems,
+        discount_type: isDiscountActive ? discountType : "None",
+        discount_id_no: isDiscountActive ? discountIdNo.trim() : null,
+        discount_amount: discountAmount,
+        save_customer_discount: Boolean(linkedCustomer && saveDiscountToProfile && isDiscountActive),
       });
 
       const trx: Transaction = {
@@ -3289,13 +3559,25 @@ function POSPage({ products, categories = CATEGORIES }: { products: Product[]; c
         customer: linkedCustomer?.full_name ?? "Walk-in",
         customerId: linkedCustomer?.customer_code,
         items: cart.map(i => ({ name: i.product.name, qty: i.qty, price: i.product.price })),
-        total, cash, change: resTrx ? Number(resTrx.change_amount) : change,
-        date: resTrx ? resTrx.date : new Date().toLocaleString("en-PH", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" }),
-        cashier: resTrx ? resTrx.cashier : (getSavedUser()?.name || "Cashier"),
+        subtotal,
+        discountType: isDiscountActive ? discountType : "None",
+        discountIdNo: isDiscountActive ? discountIdNo.trim() : undefined,
+        discountAmount,
+        total,
+        cash,
+        change: resTrx ? Number(resTrx.change_amount) : change,
+        date: resTrx?.date || new Date().toLocaleString("en-PH", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" }),
+        cashier: resTrx?.cashier || (getSavedUser()?.name || "Cashier"),
       };
       setCompletedTrx(trx);
       setShowReceipt(true);
-      toast.success(linkedCustomer ? `Transaction completed for ${linkedCustomer.full_name}!` : "Transaction completed!");
+      toast.success(
+        isDiscountActive
+          ? `Transaction completed with 5% ${discountType} discount!`
+          : linkedCustomer
+            ? `Transaction completed for ${linkedCustomer.full_name}!`
+            : "Transaction completed!"
+      );
       await refreshData();
     } catch (err: any) {
       toast.error(err.message || "Failed to complete transaction");
@@ -3303,8 +3585,14 @@ function POSPage({ products, categories = CATEGORIES }: { products: Product[]; c
   };
 
   const clearTransaction = () => {
-    setCart([]); setLinkedCustomer(null); setCustSearch(""); setCashAmount("");
-    setShowReceipt(false); setCompletedTrx(null);
+    setCart([]);
+    setLinkedCustomer(null);
+    setCustSearch("");
+    setCashAmount("");
+    setDiscountType("None");
+    setDiscountIdNo("");
+    setShowReceipt(false);
+    setCompletedTrx(null);
   };
 
   return (
@@ -3396,74 +3684,209 @@ function POSPage({ products, categories = CATEGORIES }: { products: Product[]; c
         </div>
 
         {/* Customer lookup */}
-        <div className="px-4 py-3 border-t border-border shrink-0">
-          <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Customer (Optional)</p>
+        <div className="px-3.5 py-2 border-t border-border shrink-0">
+          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Customer (Optional)</p>
           {linkedCustomer ? (
-            <div className="flex items-center gap-2 p-2.5 bg-emerald-50 rounded-xl border border-emerald-200">
-              <div className="w-7 h-7 rounded-full bg-emerald-500 flex items-center justify-center text-white text-xs font-bold shrink-0">{(linkedCustomer.full_name || "C").charAt(0)}</div>
+            <div className="flex items-center gap-2 p-1.5 px-2 bg-emerald-50 rounded-lg border border-emerald-200">
+              <div className="w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center text-white text-[11px] font-bold shrink-0">{(linkedCustomer.full_name || "C").charAt(0)}</div>
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold text-foreground truncate">{linkedCustomer.full_name}</p>
-                <p className="text-xs text-muted-foreground truncate" style={{ fontFamily: "'DM Mono', monospace" }}>{linkedCustomer.customer_code} • @{linkedCustomer.username}</p>
+                <p className="text-xs font-bold text-foreground truncate leading-tight">{linkedCustomer.full_name}</p>
+                <p className="text-[10px] text-muted-foreground truncate" style={{ fontFamily: "'DM Mono', monospace" }}>
+                  {linkedCustomer.customer_code} • @{linkedCustomer.username}
+                </p>
               </div>
-              <button onClick={() => { setLinkedCustomer(null); setCustSearch(""); }} className="text-muted-foreground hover:text-red-500 transition-colors shrink-0"><X size={14} /></button>
+              <button onClick={() => { setLinkedCustomer(null); setCustSearch(""); }} className="text-muted-foreground hover:text-red-500 transition-colors shrink-0 p-0.5"><X size={13} /></button>
             </div>
           ) : (
             <div className="relative">
-              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <input value={custSearch} onChange={e => setCustSearch(e.target.value)} placeholder="Search customer name or ID..." className="w-full pl-7 pr-3 py-2 rounded-xl border border-border bg-background text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500/30" />
+              <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <input value={custSearch} onChange={e => setCustSearch(e.target.value)} placeholder="Search customer name or ID..." className="w-full pl-7 pr-3 py-1.5 rounded-lg border border-border bg-background text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500/30" />
               {custResults.length > 0 && (
                 <div className="absolute bottom-full mb-1 left-0 right-0 bg-card border border-border rounded-xl shadow-xl z-20 max-h-48 overflow-y-auto">
-                  {custResults.map(c => (
-                    <button key={c.id} onClick={() => { setLinkedCustomer(c); setCustSearch(""); }} className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-muted transition-colors text-left border-b border-border/50 last:border-0">
-                      <div className="w-6 h-6 rounded-full bg-purple-100 flex items-center justify-center text-purple-700 text-xs font-bold shrink-0">{(c.full_name || "C").charAt(0)}</div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-semibold text-foreground truncate">{c.full_name}</p>
-                        <p className="text-xs text-muted-foreground truncate" style={{ fontFamily: "'DM Mono', monospace" }}>{c.customer_code} • @{c.username}</p>
-                      </div>
-                    </button>
-                  ))}
+                  {custResults.map(c => {
+                    const hasDiscount = (c.discount_type === "Senior Citizen" || c.discount_type === "PWD") && c.discount_id_no;
+                    return (
+                      <button key={c.id} onClick={() => { setLinkedCustomer(c); setCustSearch(""); }} className="w-full flex items-center gap-2 px-3 py-2 hover:bg-muted transition-colors text-left border-b border-border/50 last:border-0">
+                        <div className="w-6 h-6 rounded-full bg-purple-100 flex items-center justify-center text-purple-700 text-xs font-bold shrink-0">{(c.full_name || "C").charAt(0)}</div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-xs font-semibold text-foreground truncate">{c.full_name}</p>
+                            {hasDiscount && (
+                              <span className="text-[10px] font-extrabold px-1.5 py-0.2 bg-emerald-100 text-emerald-700 rounded">
+                                {c.discount_type === "Senior Citizen" ? "Senior" : "PWD"}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground truncate" style={{ fontFamily: "'DM Mono', monospace" }}>{c.customer_code} • @{c.username}</p>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>
           )}
         </div>
 
+        {/* Customer Discount (Senior Citizen / PWD) */}
+        <div className="px-3.5 py-2 border-t border-border shrink-0 bg-slate-50/70">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+              <Percent size={11} className="text-emerald-600" />
+              Discount (Senior / PWD)
+            </span>
+            {isDiscountActive && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-emerald-700 bg-emerald-100/90 px-1.5 py-0.5 rounded">
+                <Check size={10} className="stroke-[3]" />
+                5% Applied
+              </span>
+            )}
+          </div>
+
+          {/* Discount type toggle buttons */}
+          <div className="grid grid-cols-3 gap-1 p-0.5 bg-muted/60 rounded-lg">
+            {(["None", "Senior Citizen", "PWD"] as const).map(type => {
+              const active = discountType === type;
+              return (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => {
+                    setDiscountType(type);
+                    if (type === "None") setDiscountIdNo("");
+                    else if (
+                      linkedCustomer &&
+                      linkedCustomer.discount_type === type &&
+                      linkedCustomer.discount_id_no
+                    ) {
+                      setDiscountIdNo(linkedCustomer.discount_id_no);
+                    }
+                  }}
+                  className={`py-1 px-1.5 rounded-md text-[11px] font-bold transition-all text-center ${
+                    active
+                      ? "bg-white text-emerald-700 shadow-sm border border-emerald-200"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {type === "Senior Citizen" ? "Senior (5%)" : type === "PWD" ? "PWD (5%)" : "None"}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* ID verification input when Senior Citizen or PWD is selected */}
+          {discountType !== "None" && (
+            <div className="mt-1.5 space-y-1">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] font-bold text-foreground">
+                  {discountType === "Senior Citizen" ? "Senior Citizen ID No." : "PWD ID No."}{" "}
+                  <span className="text-red-500">*</span>
+                </label>
+                {isCustomerRegisteredDiscounted &&
+                  linkedCustomer?.discount_type === discountType && (
+                    <span className="text-[9px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.2 rounded border border-emerald-200 flex items-center gap-0.5">
+                      <Check size={9} className="stroke-[3]" /> Registered ID
+                    </span>
+                  )}
+              </div>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={discountIdNo}
+                  onChange={e => setDiscountIdNo(e.target.value)}
+                  placeholder={
+                    discountType === "Senior Citizen"
+                      ? "Enter OSCA / Senior ID No."
+                      : "Enter PWD ID No."
+                  }
+                  className={`w-full px-2.5 py-1 pr-7 text-xs rounded-lg border bg-background font-mono font-medium focus:outline-none focus:ring-1 ${
+                    isDiscountActive
+                      ? "border-emerald-400 focus:ring-emerald-400/30 text-emerald-800"
+                      : "border-amber-400 focus:ring-amber-400/30"
+                  }`}
+                />
+                {discountIdNo.trim() ? (
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 text-emerald-600">
+                    <CheckCircle size={13} />
+                  </div>
+                ) : (
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 text-amber-500">
+                    <AlertCircle size={13} />
+                  </div>
+                )}
+              </div>
+
+              {!isDiscountActive && (
+                <p className="text-[10px] text-amber-700 font-medium flex items-center gap-1">
+                  <AlertCircle size={11} className="shrink-0" />
+                  Enter ID number to apply 5% discount.
+                </p>
+              )}
+
+              {/* Option: save ID to customer profile if linked customer doesn't have it saved yet */}
+              {linkedCustomer && !isCustomerRegisteredDiscounted && (
+                <label className="flex items-center gap-1.5 text-[10px] text-muted-foreground cursor-pointer pt-0.5">
+                  <input
+                    type="checkbox"
+                    checked={saveDiscountToProfile}
+                    onChange={e => setSaveDiscountToProfile(e.target.checked)}
+                    className="rounded text-emerald-600 focus:ring-emerald-500 w-3 h-3"
+                  />
+                  <span>Save ID to customer profile</span>
+                </label>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* Payment */}
-        <div className="p-4 border-t border-border space-y-3 shrink-0">
-          <div className="flex items-center justify-between">
-            <span className="text-base font-extrabold text-foreground">TOTAL</span>
-            <span className="text-xl font-extrabold text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{peso(total)}</span>
+        <div className="p-3 border-t border-border space-y-2 shrink-0">
+          <div className="space-y-1">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>Subtotal</span>
+              <span style={{ fontFamily: "'DM Mono', monospace" }}>{peso(subtotal)}</span>
+            </div>
+            {isDiscountActive && (
+              <div className="flex items-center justify-between text-xs font-semibold text-emerald-600">
+                <span>Discount (5% {discountType === "Senior Citizen" ? "Senior" : "PWD"})</span>
+                <span style={{ fontFamily: "'DM Mono', monospace" }}>-{peso(discountAmount)}</span>
+              </div>
+            )}
+            <div className="flex items-center justify-between pt-1 border-t border-border/60">
+              <span className="text-sm font-extrabold text-foreground">TOTAL TO PAY</span>
+              <span className="text-lg font-extrabold text-emerald-600" style={{ fontFamily: "'DM Mono', monospace" }}>{peso(total)}</span>
+            </div>
           </div>
 
           <div>
-            <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Cash Tendered</label>
-            <input type="number" value={cashAmount} onChange={e => setCashAmount(e.target.value)} placeholder="0.00" className="mt-1.5 w-full px-4 py-3 rounded-xl border border-border bg-background text-xl font-extrabold text-center focus:outline-none focus:ring-2 focus:ring-emerald-500/30" style={{ fontFamily: "'DM Mono', monospace" }} />
-            <div className="flex gap-1.5 mt-2">
+            <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Cash Tendered</label>
+            <input type="number" value={cashAmount} onChange={e => setCashAmount(e.target.value)} placeholder="0.00" className="mt-1 w-full px-3 py-1.5 rounded-lg border border-border bg-background text-base font-extrabold text-center focus:outline-none focus:ring-2 focus:ring-emerald-500/30" style={{ fontFamily: "'DM Mono', monospace" }} />
+            <div className="flex gap-1.5 mt-1.5">
               {[50, 100, 500, 1000].map(amt => (
-                <button key={amt} onClick={() => setCashAmount(String(amt))} className="flex-1 py-1.5 text-xs font-bold rounded-lg bg-muted hover:bg-slate-200 transition-colors">₱{amt}</button>
+                <button key={amt} onClick={() => setCashAmount(String(amt))} className="flex-1 py-1 text-xs font-bold rounded-lg bg-muted hover:bg-slate-200 transition-colors">₱{amt}</button>
               ))}
             </div>
           </div>
 
           {cash >= total && cash > 0 && (
-            <div className="flex items-center justify-between p-3 bg-emerald-50 rounded-xl border border-emerald-200">
-              <span className="text-sm font-bold text-emerald-700">Change</span>
-              <span className="text-xl font-extrabold text-emerald-700" style={{ fontFamily: "'DM Mono', monospace" }}>{peso(change)}</span>
+            <div className="flex items-center justify-between px-3 py-1.5 bg-emerald-50 rounded-lg border border-emerald-200">
+              <span className="text-xs font-bold text-emerald-700">Change</span>
+              <span className="text-base font-extrabold text-emerald-700" style={{ fontFamily: "'DM Mono', monospace" }}>{peso(change)}</span>
             </div>
           )}
           {cash > 0 && cash < total && (
-            <div className="flex items-center justify-between p-3 bg-red-50 rounded-xl border border-red-200">
-              <span className="text-sm font-bold text-red-600">Short by</span>
-              <span className="text-sm font-extrabold text-red-600" style={{ fontFamily: "'DM Mono', monospace" }}>{peso(total - cash)}</span>
+            <div className="flex items-center justify-between px-3 py-1.5 bg-red-50 rounded-lg border border-red-200">
+              <span className="text-xs font-bold text-red-600">Short by</span>
+              <span className="text-xs font-extrabold text-red-600" style={{ fontFamily: "'DM Mono', monospace" }}>{peso(total - cash)}</span>
             </div>
           )}
 
-          <button onClick={completeTransaction} disabled={!canComplete} className={`w-full py-3.5 rounded-2xl text-sm font-extrabold transition-all flex items-center justify-center gap-2 ${canComplete ? "bg-emerald-600 text-white hover:bg-emerald-700 shadow-lg shadow-emerald-600/20" : "bg-muted text-muted-foreground cursor-not-allowed"}`}>
-            <CheckCircle size={16} />
+          <button onClick={completeTransaction} disabled={!canComplete} className={`w-full py-2.5 rounded-xl text-sm font-extrabold transition-all flex items-center justify-center gap-2 ${canComplete ? "bg-emerald-600 text-white hover:bg-emerald-700 shadow-md shadow-emerald-600/20" : "bg-muted text-muted-foreground cursor-not-allowed"}`}>
+            <CheckCircle size={15} />
             Complete Transaction
           </button>
           {cart.length > 0 && (
-            <button onClick={clearTransaction} className="w-full py-2 text-xs font-semibold text-muted-foreground hover:text-red-500 transition-colors">Clear Order</button>
+            <button onClick={clearTransaction} className="w-full py-1 text-[11px] font-semibold text-muted-foreground hover:text-red-500 transition-colors">Clear Order</button>
           )}
         </div>
       </div>
@@ -3488,6 +3911,16 @@ function POSPage({ products, categories = CATEGORIES }: { products: Product[]; c
               <div className="text-xs space-y-0.5 text-muted-foreground">
                 <p>Cashier: {completedTrx.cashier}</p>
                 <p>Customer: {completedTrx.customer}</p>
+                {completedTrx.discountType && completedTrx.discountType !== "None" && (
+                  <p className="text-emerald-700 font-semibold">
+                    Discount: {completedTrx.discountType} (5%)
+                  </p>
+                )}
+                {completedTrx.discountIdNo && (
+                  <p className="text-emerald-700 font-semibold">
+                    ID No: {completedTrx.discountIdNo}
+                  </p>
+                )}
               </div>
 
               <div className="border-t border-dashed border-slate-200 pt-3 space-y-1.5">
@@ -3500,9 +3933,28 @@ function POSPage({ products, categories = CATEGORIES }: { products: Product[]; c
               </div>
 
               <div className="border-t border-dashed border-slate-200 pt-3 space-y-1.5">
-                <div className="flex justify-between font-extrabold text-sm text-foreground"><span>TOTAL</span><span>{peso(completedTrx.total)}</span></div>
-                <div className="flex justify-between text-xs text-muted-foreground"><span>Cash</span><span>{peso(completedTrx.cash)}</span></div>
-                <div className="flex justify-between text-sm font-extrabold text-emerald-600"><span>Change</span><span>{peso(completedTrx.change)}</span></div>
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Subtotal</span>
+                  <span>{peso(completedTrx.subtotal ?? completedTrx.total)}</span>
+                </div>
+                {completedTrx.discountType && completedTrx.discountType !== "None" && (completedTrx.discountAmount ?? 0) > 0 && (
+                  <div className="flex justify-between text-xs text-emerald-600 font-semibold">
+                    <span>Discount (5% {completedTrx.discountType === "Senior Citizen" ? "Senior" : "PWD"})</span>
+                    <span>-{peso(completedTrx.discountAmount!)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between font-extrabold text-sm text-foreground pt-1 border-t border-dashed border-slate-200">
+                  <span>TOTAL</span>
+                  <span>{peso(completedTrx.total)}</span>
+                </div>
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Cash</span>
+                  <span>{peso(completedTrx.cash)}</span>
+                </div>
+                <div className="flex justify-between text-sm font-extrabold text-emerald-600">
+                  <span>Change</span>
+                  <span>{peso(completedTrx.change)}</span>
+                </div>
               </div>
 
               <p className="text-center text-xs text-muted-foreground border-t border-dashed border-slate-200 pt-3">Thank you for shopping at SmartMart!</p>
@@ -3537,6 +3989,19 @@ function StaffDashboard({ onNavigate, products = [] }: { onNavigate: (p: StaffPa
   useEffect(() => {
     refreshData();
   }, [refreshData]);
+
+  // Customer total spent map across all transactions
+  const customerSpentMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    transactions.forEach(t => {
+      const cust = (t.customer || (t as any).customer_name || "").trim();
+      if (cust && cust.toLowerCase() !== "walk-in" && cust.toLowerCase() !== "walk-in customer") {
+        const key = cust.toLowerCase();
+        map[key] = (map[key] || 0) + Number(t.total_amount || 0);
+      }
+    });
+    return map;
+  }, [transactions]);
 
   // Determine dynamic greeting based on current time
   const greeting = useMemo(() => {
@@ -3748,6 +4213,11 @@ function StaffDashboard({ onNavigate, products = [] }: { onNavigate: (p: StaffPa
                           {isRegistered && (
                             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-100 text-purple-700 border border-purple-200">
                               Member Account
+                            </span>
+                          )}
+                          {isRegistered && (
+                            <span className="inline-flex items-center text-[10px] font-medium text-emerald-600 bg-emerald-50 border border-emerald-100/60 rounded-md px-1.5 py-0.5">
+                              Total Spent: <strong className="ml-1 font-mono font-bold">{peso(customerSpentMap[rawCustomer.toLowerCase().trim()] || Number(t.total_amount || 0))}</strong>
                             </span>
                           )}
                         </div>
@@ -4064,20 +4534,79 @@ function TransactionsPage() {
   }, [refreshData]);
 
   const DISPLAY_LIMIT = 10;
-  const recentTransactions = transactions.slice(0, DISPLAY_LIMIT);
-  const hasMore = transactions.length > DISPLAY_LIMIT;
 
+  // Precompute customer total spent map across all recorded transactions
+  const customerSpentMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    transactions.forEach(t => {
+      const cust = (t.customer || "").trim();
+      if (cust && cust.toLowerCase() !== "walk-in" && cust.toLowerCase() !== "walk-in customer") {
+        const key = cust.toLowerCase();
+        map[key] = (map[key] || 0) + Number(t.total_amount || 0);
+      }
+    });
+    return map;
+  }, [transactions]);
+
+  // Check if current search query matches any registered customer name
+  const matchedCustomerNames = useMemo(() => {
+    const q = allSearch.trim().toLowerCase();
+    if (!q) return [];
+    const qTokens = q.replace(/,/g, " ").split(/\s+/).filter(Boolean);
+    const names = new Set<string>();
+    transactions.forEach(t => {
+      const cust = (t.customer || "").trim();
+      if (cust && cust.toLowerCase() !== "walk-in" && cust.toLowerCase() !== "walk-in customer") {
+        const lowerCust = cust.toLowerCase();
+        const matches = lowerCust.includes(q) || (qTokens.length > 0 && qTokens.every(tok => lowerCust.includes(tok)));
+        if (matches) {
+          names.add(cust);
+        }
+      }
+    });
+    return Array.from(names);
+  }, [allSearch, transactions]);
+
+  // It is a customer search if the cashier query matches customer(s)
+  const isCustomerSearch = Boolean(allSearch.trim() && matchedCustomerNames.length > 0);
+
+  // Overall total revenue
+  const totalRevenue = useMemo(() => {
+    return transactions.reduce((s, t) => s + Number(t.total_amount || 0), 0);
+  }, [transactions]);
+
+  // When a customer is searched, compute total spent for that customer (or matching customers)
+  const customerTotalSpent = useMemo(() => {
+    if (!isCustomerSearch) return 0;
+    if (matchedCustomerNames.length === 1) {
+      return customerSpentMap[matchedCustomerNames[0].toLowerCase()] || 0;
+    }
+    const targetSet = new Set(matchedCustomerNames.map(n => n.toLowerCase()));
+    return transactions
+      .filter(t => t.customer && targetSet.has(t.customer.toLowerCase().trim()))
+      .reduce((sum, t) => sum + Number(t.total_amount || 0), 0);
+  }, [isCustomerSearch, matchedCustomerNames, customerSpentMap, transactions]);
+
+  // Filtered transactions for search
   const filteredAll = useMemo(() => {
     if (!allSearch.trim()) return transactions;
     const q = allSearch.toLowerCase();
-    return transactions.filter(t =>
-      t.receipt_no.toLowerCase().includes(q) ||
-      t.customer.toLowerCase().includes(q) ||
-      t.cashier.toLowerCase().includes(q) ||
-      t.date.toLowerCase().includes(q) ||
-      String(t.total_amount).includes(q)
-    );
+    const qTokens = q.replace(/,/g, " ").split(/\s+/).filter(Boolean);
+    return transactions.filter(t => {
+      const cust = (t.customer || "").toLowerCase();
+      const matchCust = cust.includes(q) || (qTokens.length > 0 && qTokens.every(tok => cust.includes(tok)));
+      return (
+        matchCust ||
+        t.receipt_no.toLowerCase().includes(q) ||
+        t.cashier.toLowerCase().includes(q) ||
+        t.date.toLowerCase().includes(q) ||
+        String(t.total_amount).includes(q)
+      );
+    });
   }, [transactions, allSearch]);
+
+  const recentTransactions = transactions.slice(0, DISPLAY_LIMIT);
+  const hasMore = transactions.length > DISPLAY_LIMIT;
 
   const handleSelectTransaction = async (t: TransactionItem) => {
     setSelected(t);
@@ -4085,9 +4614,9 @@ function TransactionsPage() {
     try {
       const items: any = await api.transactions.getItems(t.id);
       setSelectedItems(items.map((i: any) => ({
-        name: i.product_name,
-        qty: i.quantity,
-        price: Number(i.unit_price)
+        name: i.product_name || i.name,
+        qty: Number(i.quantity || 1),
+        price: Number(i.unit_price || i.price || 0)
       })));
     } catch {
       setSelectedItems([]);
@@ -4096,21 +4625,21 @@ function TransactionsPage() {
     }
   };
 
-  const totalRevenue = transactions.reduce((s, t) => s + Number(t.total_amount), 0);
-
-  const renderRow = (t: TransactionItem) => (
-    <tr key={t.id} className="hover:bg-muted/20 transition-colors">
-      <td className="px-4 py-3 text-sm font-bold text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{t.receipt_no}</td>
-      <td className="px-4 py-3 text-sm font-medium text-foreground">{t.customer}</td>
-      <td className="px-4 py-3 text-sm text-muted-foreground">{t.cashier}</td>
-      <td className="px-4 py-3 text-sm text-muted-foreground">{t.date}</td>
-      <td className="px-4 py-3 text-right text-sm font-extrabold text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{peso(Number(t.total_amount))}</td>
-      <td className="px-4 py-3 text-center"><Badge variant="success">Completed</Badge></td>
-      <td className="px-4 py-3 text-right">
-        <button onClick={() => handleSelectTransaction(t)} className="px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors">View Receipt</button>
-      </td>
-    </tr>
-  );
+  const renderRow = (t: TransactionItem) => {
+    return (
+      <tr key={t.id} className="hover:bg-muted/20 transition-colors">
+        <td className="px-4 py-3 text-sm font-bold text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{t.receipt_no}</td>
+        <td className="px-4 py-3 text-sm font-medium text-foreground">{t.customer}</td>
+        <td className="px-4 py-3 text-sm text-muted-foreground">{t.cashier}</td>
+        <td className="px-4 py-3 text-sm text-muted-foreground">{t.date}</td>
+        <td className="px-4 py-3 text-right text-sm font-extrabold text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{peso(Number(t.total_amount))}</td>
+        <td className="px-4 py-3 text-center"><Badge variant="success">Completed</Badge></td>
+        <td className="px-4 py-3 text-right">
+          <button onClick={() => handleSelectTransaction(t)} className="px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors">View Receipt</button>
+        </td>
+      </tr>
+    );
+  };
 
   const tableHead = (
     <thead>
@@ -4128,29 +4657,78 @@ function TransactionsPage() {
 
   return (
     <div className="p-6 space-y-5">
-      <div className="flex items-center justify-between">
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-extrabold text-foreground">Transactions</h1>
-          <p className="text-muted-foreground text-sm">Showing recent {recentTransactions.length} of {transactions.length} total records</p>
+          <p className="text-muted-foreground text-sm">
+            Showing recent {recentTransactions.length} of {transactions.length} total records
+          </p>
         </div>
-        {hasMore && (
-          <button
-            onClick={() => { setShowAllModal(true); setAllSearch(""); }}
-            className="flex items-center gap-2 px-4 py-2.5 text-sm font-bold rounded-xl bg-[#22c55e] text-white hover:bg-[#16a34a] transition-all shadow-sm"
-          >
-            <ClipboardList size={15} /> View All Transactions
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {hasMore && (
+            <button
+              onClick={() => {
+                setAllSearch("");
+                setShowAllModal(true);
+              }}
+              className="flex items-center gap-2 px-4 py-2.5 text-sm font-bold rounded-xl bg-[#22c55e] text-white hover:bg-[#16a34a] transition-all shadow-sm shrink-0"
+            >
+              <ClipboardList size={15} /> View All Transactions ({transactions.length})
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Main table — recent 10 */}
+      {/* Quick Metrics Bar on Main Page */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="bg-card rounded-2xl border border-border p-4 flex items-center justify-between shadow-sm">
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Total Count</p>
+            <p className="text-xl font-extrabold text-foreground mt-0.5" style={{ fontFamily: "'DM Mono', monospace" }}>{transactions.length}</p>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+            <ClipboardList size={18} />
+          </div>
+        </div>
+
+        <div className="bg-card rounded-2xl border border-border p-4 flex items-center justify-between shadow-sm">
+          <div className="min-w-0 pr-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Total Sales
+            </p>
+            <p className="text-xl font-extrabold text-emerald-600 mt-0.5 truncate" style={{ fontFamily: "'DM Mono', monospace" }}>
+              {peso(totalRevenue)}
+            </p>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+            <Receipt size={18} />
+          </div>
+        </div>
+
+        <div className="bg-card rounded-2xl border border-border p-4 flex items-center justify-between shadow-sm">
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Showing</p>
+            <p className="text-xl font-extrabold text-foreground mt-0.5" style={{ fontFamily: "'DM Mono', monospace" }}>
+              {recentTransactions.length}
+            </p>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
+            <Search size={18} />
+          </div>
+        </div>
+      </div>
+
+      {/* Main table — recent records */}
       <div className="bg-card rounded-2xl border border-border overflow-hidden shadow-sm">
         <table className="w-full">
           {tableHead}
           <tbody className="divide-y divide-border">
             {transactions.length === 0 ? (
               <tr>
-                <td colSpan={7} className="text-center py-8 text-muted-foreground text-sm">No transactions found</td>
+                <td colSpan={7} className="text-center py-8 text-muted-foreground text-sm">
+                  No transactions found
+                </td>
               </tr>
             ) : (
               recentTransactions.map(renderRow)
@@ -4209,9 +4787,20 @@ function TransactionsPage() {
                 <span className="text-xs font-semibold text-gray-500">Total Count</span>
                 <span className="text-sm font-extrabold text-gray-900" style={{ fontFamily: "'DM Mono', monospace" }}>{transactions.length}</span>
               </div>
-              <div className="bg-white rounded-xl border border-gray-100 px-4 py-2 flex items-center justify-between">
-                <span className="text-xs font-semibold text-gray-500">Total Sales</span>
-                <span className="text-sm font-extrabold text-emerald-600" style={{ fontFamily: "'DM Mono', monospace" }}>{peso(totalRevenue)}</span>
+              <div className={`rounded-xl border px-4 py-2 flex items-center justify-between transition-all ${isCustomerSearch ? "bg-emerald-50/80 border-emerald-200 ring-1 ring-emerald-400/20" : "bg-white border-gray-100"}`}>
+                <div className="flex flex-col min-w-0 pr-1">
+                  <span className={`text-xs font-semibold ${isCustomerSearch ? "text-emerald-800 font-bold" : "text-gray-500"}`}>
+                    {isCustomerSearch ? "Total Spent" : "Total Sales"}
+                  </span>
+                  {isCustomerSearch && matchedCustomerNames.length === 1 && (
+                    <span className="text-[10px] text-emerald-600 font-medium truncate max-w-[120px]" title={matchedCustomerNames[0]}>
+                      {matchedCustomerNames[0]}
+                    </span>
+                  )}
+                </div>
+                <span className="text-sm font-extrabold text-emerald-600 shrink-0" style={{ fontFamily: "'DM Mono', monospace" }}>
+                  {peso(isCustomerSearch ? customerTotalSpent : totalRevenue)}
+                </span>
               </div>
               <div className="bg-white rounded-xl border border-gray-100 px-4 py-2 flex items-center justify-between">
                 <span className="text-xs font-semibold text-gray-500">Filtered</span>
@@ -4280,6 +4869,14 @@ function TransactionsPage() {
                 <div className="p-3 bg-muted/50 rounded-xl">
                   <p className="text-xs text-muted-foreground">Customer</p>
                   <p className="font-semibold text-foreground text-sm mt-0.5">{selected.customer}</p>
+                  {selected.customer && selected.customer.toLowerCase() !== "walk-in" && selected.customer.toLowerCase() !== "walk-in customer" && (
+                    <p className="text-xs text-emerald-600 font-semibold mt-1 flex items-center gap-1">
+                      <span className="text-muted-foreground font-normal text-[11px]">Total Spent:</span>
+                      <span className="font-bold font-mono">
+                        {peso(customerSpentMap[selected.customer.toLowerCase().trim()] || Number(selected.total_amount || 0))}
+                      </span>
+                    </p>
+                  )}
                 </div>
                 <div className="p-3 bg-muted/50 rounded-xl">
                   <p className="text-xs text-muted-foreground">Cashier</p>
@@ -4427,7 +5024,7 @@ function CustomerBrowse({ products, categories = CATEGORIES }: { products: Produ
 
 // ─── Customer History ─────────────────────────────────────────────────────────
 
-function CustomerHistory() {
+function CustomerHistory({ onNavigate }: { onNavigate?: (page: CustomerPage) => void }) {
   const [myTrx, setMyTrx] = useState<TransactionItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<TransactionItem | null>(null);
@@ -4528,7 +5125,7 @@ function CustomerHistory() {
               </div>
               <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground pt-3 border-t border-border">
                 <span style={{ fontFamily: "'DM Mono', monospace" }}>Cash: {peso(Number(t.cash_tendered))} · Change: {peso(Number(t.change_amount))}</span>
-                <button onClick={() => handleSelectReceipt(t)} className="text-emerald-600 font-bold hover:underline">View Receipt</button>
+                <button onClick={() => handleSelectReceipt(t)} className="text-emerald-600 font-bold hover:underline cursor-pointer">View Receipt</button>
               </div>
             </div>
           ))}
@@ -4625,7 +5222,9 @@ function CustomerHistory() {
                         <td className="px-4 py-3 text-right text-sm font-extrabold text-gray-900" style={{ fontFamily: "'DM Mono', monospace" }}>{peso(Number(t.total_amount))}</td>
                         <td className="px-4 py-3 text-center"><Badge variant="success">Completed</Badge></td>
                         <td className="px-4 py-3 text-right">
-                          <button onClick={() => handleSelectReceipt(t)} className="px-3 py-1.5 text-xs font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors">View Receipt</button>
+                          <div className="flex items-center justify-end">
+                            <button onClick={() => handleSelectReceipt(t)} className="px-3 py-1.5 text-xs font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors cursor-pointer">View Receipt</button>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -4681,7 +5280,7 @@ function CustomerHistory() {
               <p className="text-center text-xs text-muted-foreground border-t border-dashed pt-3">Thank you for shopping at SmartMart!</p>
             </div>
             <div className="p-4">
-              <button onClick={() => { setSelected(null); setSelectedItems([]); }} className="w-full py-2.5 bg-emerald-600 text-white rounded-2xl text-sm font-bold hover:bg-emerald-700 transition-colors">Close</button>
+              <button onClick={() => { setSelected(null); setSelectedItems([]); }} className="w-full py-2.5 bg-emerald-600 text-white rounded-2xl text-xs font-bold hover:bg-emerald-700 transition-colors cursor-pointer">Close</button>
             </div>
           </div>
         </div>
@@ -4711,6 +5310,8 @@ function CustomerProfile() {
     gender: "",
     civil_status: "",
     date_of_birth: "",
+    discount_type: "None" as "None" | "Senior Citizen" | "PWD",
+    discount_id_no: "",
   });
   const [saving, setSaving] = useState(false);
   const [profileMsg, setProfileMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -4751,6 +5352,8 @@ function CustomerProfile() {
       gender: profile.gender,
       civil_status: profile.civil_status,
       date_of_birth: profile.date_of_birth,
+      discount_type: (profile.discount_type as any) || "None",
+      discount_id_no: profile.discount_id_no || "",
     });
     setEditing(true);
     setProfileMsg(null);
@@ -4770,6 +5373,10 @@ function CustomerProfile() {
     if (!editForm.date_of_birth) { setProfileMsg({ type: "error", text: "Date of birth is required." }); return; }
     if (!editForm.gender) { setProfileMsg({ type: "error", text: "Gender is required." }); return; }
     if (!editForm.civil_status) { setProfileMsg({ type: "error", text: "Civil status is required." }); return; }
+    if (editForm.discount_type !== "None" && !editForm.discount_id_no.trim()) {
+      setProfileMsg({ type: "error", text: `${editForm.discount_type} ID number is required.` });
+      return;
+    }
 
     setSaving(true);
     try {
@@ -4782,6 +5389,8 @@ function CustomerProfile() {
         gender: editForm.gender,
         civil_status: editForm.civil_status,
         date_of_birth: editForm.date_of_birth,
+        discount_type: editForm.discount_type,
+        discount_id_no: editForm.discount_type !== "None" ? editForm.discount_id_no.trim() : null,
       });
       setProfile(result.profile);
       setEditing(false);
@@ -5024,6 +5633,47 @@ function CustomerProfile() {
               </div>
             </div>
 
+            {/* Discount Eligibility in Edit Mode */}
+            <div className="p-4 bg-muted/40 rounded-xl border border-border space-y-3">
+              <label className="block text-sm font-semibold text-foreground">
+                Discount Eligibility (Senior Citizen / PWD)
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {(["None", "Senior Citizen", "PWD"] as const).map(type => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => setEditForm(f => ({ ...f, discount_type: type, discount_id_no: type === "None" ? "" : f.discount_id_no }))}
+                    className={`py-2 px-3 rounded-xl text-xs font-bold transition-all border text-center ${
+                      editForm.discount_type === type
+                        ? "bg-emerald-50 border-emerald-500 text-emerald-700 shadow-sm"
+                        : "bg-background border-border text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {type === "Senior Citizen" ? "Senior Citizen" : type}
+                  </button>
+                ))}
+              </div>
+              {editForm.discount_type !== "None" && (
+                <div>
+                  <label className="block text-xs font-semibold text-foreground mb-1">
+                    {editForm.discount_type === "Senior Citizen" ? "OSCA / Senior Citizen ID No." : "PWD ID No."}{" "}
+                    <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.discount_id_no}
+                    onChange={e => setEditForm(f => ({ ...f, discount_id_no: e.target.value }))}
+                    placeholder="Enter ID number to verify discount eligibility"
+                    className="w-full px-4 py-2 rounded-xl border border-border bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                  />
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    This ID number is verified by cashiers at checkout for automatic 5% billing discounts.
+                  </p>
+                </div>
+              )}
+            </div>
+
             {/* Save / Cancel buttons */}
             <div className="flex gap-3 pt-2">
               <button
@@ -5080,6 +5730,38 @@ function CustomerProfile() {
               <div className="p-3.5 bg-background rounded-xl border border-border">
                 <p className="text-xs text-muted-foreground font-medium">Civil Status</p>
                 <p className="font-semibold text-foreground text-sm mt-0.5">{profile?.civil_status || "—"}</p>
+              </div>
+            </div>
+
+            {/* Discount Status Box in View Mode */}
+            <div className="p-4 bg-background rounded-xl border border-border">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-muted-foreground font-medium">Discount Category (Senior Citizen / PWD)</p>
+                  <p className="font-bold text-foreground text-sm mt-0.5">
+                    {profile?.discount_type && profile.discount_type !== "None"
+                      ? `${profile.discount_type} (5% Discount)`
+                      : "Regular Customer (No Discount Registered)"}
+                  </p>
+                  {profile?.discount_id_no ? (
+                    <p className="text-xs text-emerald-600 font-mono font-semibold mt-1">
+                      Verified ID No: {profile.discount_id_no}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Present your ID in store or edit your profile to register for 5% discounts.
+                    </p>
+                  )}
+                </div>
+                {profile?.discount_type && profile.discount_type !== "None" ? (
+                  <span className="inline-flex items-center gap-1 text-xs font-bold px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">
+                    <CheckCircle size={13} /> 5% Active
+                  </span>
+                ) : (
+                  <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-muted text-muted-foreground">
+                    Standard
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -6192,10 +6874,23 @@ function AdminSettingsPage() {
 function AdminLayout({ onLogout }: { onLogout: () => void }) {
   const [page, setPage] = useState<AdminPage>("dashboard");
   const { products, categories, catMeta, addProduct: handleAddProduct, addCategory: handleAddCategory, pendingCustomers } = useStore();
+  const [pendingReturns, setPendingReturns] = useState(0);
+
+  const fetchPendingReturns = useCallback(() => {
+    api.returns.getAll({ status: "Pending" })
+      .then(res => setPendingReturns(Number(res.summary?.pending_count || 0)))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetchPendingReturns();
+    const interval = setInterval(fetchPendingReturns, 30000);
+    return () => clearInterval(interval);
+  }, [fetchPendingReturns]);
 
   const PAGE_LABELS: Record<AdminPage, string> = {
     dashboard: "Dashboard", products: "Products", categories: "Categories",
-    inventory: "Inventory", sales: "Sales", customers: "Customers",
+    inventory: "Inventory", sales: "Sales", returns: "Product Returns", customers: "Customers",
     staff: "Staff", reports: "Reports", settings: "Settings",
   };
 
@@ -6206,6 +6901,7 @@ function AdminLayout({ onLogout }: { onLogout: () => void }) {
       case "categories": return <AdminCategoriesPage products={products} categories={categories} catMeta={catMeta} onAddCategory={handleAddCategory} />;
       case "inventory": return <InventoryPage products={products} categories={categories} catMeta={catMeta} />;
       case "sales": return <AdminSalesPage />;
+      case "returns": return <ReturnsManagement role="admin" onReturnsUpdated={fetchPendingReturns} />;
       case "staff": return <AdminStaffPage />;
       case "customers": return <CustomersPage />;
       case "reports": return <ReportsPage />;
@@ -6215,7 +6911,7 @@ function AdminLayout({ onLogout }: { onLogout: () => void }) {
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#f9fafb]">
-      <Sidebar role="admin" activePage={page} onNavigate={p => setPage(p as AdminPage)} onLogout={onLogout} userName="Admin User" pendingCount={pendingCustomers.length} />
+      <Sidebar role="admin" activePage={page} onNavigate={p => setPage(p as AdminPage)} onLogout={onLogout} userName="Admin User" pendingCount={pendingCustomers.length} pendingReturnsCount={pendingReturns} />
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         {/* Top bar */}
         <header className="h-14 border-b border-gray-200 bg-white flex items-center justify-between px-5 shrink-0 shadow-sm">
@@ -6239,22 +6935,36 @@ function StaffLayout({ onLogout }: { onLogout: () => void }) {
   const { products, categories } = useStore();
   const user = getSavedUser();
   const displayName = user?.name || "Staff";
+  const [pendingReturns, setPendingReturns] = useState(0);
+
+  const fetchPendingReturns = useCallback(() => {
+    api.returns.getAll({ status: "Pending" })
+      .then(res => setPendingReturns(Number(res.summary?.pending_count || 0)))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetchPendingReturns();
+    const interval = setInterval(fetchPendingReturns, 30000);
+    return () => clearInterval(interval);
+  }, [fetchPendingReturns]);
 
   const renderPage = () => {
     switch (page) {
       case "dashboard": return <StaffDashboard onNavigate={p => setPage(p)} products={products} />;
       case "pos": return <POSPage products={products} categories={categories} />;
       case "transactions": return <TransactionsPage />;
+      case "returns": return <ReturnsManagement role="staff" onReturnsUpdated={fetchPendingReturns} />;
       case "profile": return <StaffProfile />;
     }
   };
 
   return (
     <div className="flex h-screen overflow-hidden">
-      <Sidebar role="staff" activePage={page} onNavigate={p => setPage(p as StaffPage)} onLogout={onLogout} userName={displayName} />
+      <Sidebar role="staff" activePage={page} onNavigate={p => setPage(p as StaffPage)} onLogout={onLogout} userName={displayName} pendingReturnsCount={pendingReturns} />
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <header className="h-14 border-b border-border bg-card flex items-center justify-between px-5 shrink-0">
-          <span className="text-sm font-extrabold text-foreground">{page === "pos" ? "Point of Sale" : page === "transactions" ? "Today's Transactions" : page === "profile" ? "My Profile" : "Staff Dashboard"}</span>
+          <span className="text-sm font-extrabold text-foreground">{page === "pos" ? "Point of Sale" : page === "transactions" ? "Today's Transactions" : page === "returns" ? "Product Returns" : page === "profile" ? "My Profile" : "Staff Dashboard"}</span>
           <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center text-white text-sm font-extrabold">{displayName.charAt(0)}</div>
         </header>
         <main className={`flex-1 min-h-0 ${page === "pos" ? "overflow-hidden flex" : "overflow-y-auto scrollbar-hide"}`}>{renderPage()}</main>
@@ -6272,7 +6982,9 @@ function CustomerLayout({ onLogout }: { onLogout: () => void }) {
   const renderPage = () => {
     switch (page) {
       case "browse": return <CustomerBrowse products={products} categories={categories} />;
-      case "history": return <CustomerHistory />;
+      case "history": return <CustomerHistory onNavigate={p => setPage(p)} />;
+      case "analytics": return <CustomerAnalytics onNavigate={p => setPage(p as CustomerPage)} />;
+      case "returns-history": return <CustomerReturnHistoryView />;
       case "profile": return <CustomerProfile />;
     }
   };
@@ -6282,7 +6994,17 @@ function CustomerLayout({ onLogout }: { onLogout: () => void }) {
       <Sidebar role="customer" activePage={page} onNavigate={p => setPage(p as CustomerPage)} onLogout={onLogout} userName={userName} />
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <header className="h-14 border-b border-border bg-card flex items-center justify-between px-5 shrink-0">
-          <span className="text-sm font-extrabold text-foreground">SmartMart Customer Portal</span>
+          <span className="text-sm font-extrabold text-foreground">
+            {page === "browse"
+              ? "SmartMart Browse Catalog"
+              : page === "history"
+              ? "Purchase History"
+              : page === "analytics"
+              ? "My Spending Analytics"
+              : page === "returns-history"
+              ? "Return History"
+              : "Customer Profile"}
+          </span>
           <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center text-white text-sm font-extrabold">
             {userName.charAt(0)}
           </div>
