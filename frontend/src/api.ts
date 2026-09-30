@@ -68,6 +68,8 @@ export interface RegisteredCustomer {
   username: string;
   temp_password?: string;
   total_purchases: number;
+  discount_type?: "None" | "Senior Citizen" | "PWD";
+  discount_id_no?: string | null;
 }
 
 export interface PendingCustomer {
@@ -88,6 +90,10 @@ export interface TransactionItem {
   receipt_no: string;
   customer: string;
   cashier: string;
+  subtotal_amount?: number | string;
+  discount_type?: "None" | "Senior Citizen" | "PWD";
+  discount_id_no?: string | null;
+  discount_amount?: number | string;
   total_amount: number | string;
   cash_tendered: number | string;
   change_amount: number | string;
@@ -116,6 +122,92 @@ export interface TransactionItem {
   has_returned_items?: boolean;
   items_summary?: string;
   returnable_items_summary?: string;
+}
+
+export interface CustomerPurchasedItem {
+  item_id: number;
+  transaction_id: number;
+  receipt_no: string;
+  created_at: string;
+  date_ymd: string;
+  year_month: string;
+  year: string;
+  month_label: string;
+  month_short: string;
+  month_num: string;
+  formatted_date: string;
+  product_id: number;
+  product_name: string;
+  category_id?: number;
+  category: string;
+  quantity: number;
+  unit_price: number;
+  line_total: number;
+  returned_quantity?: number;
+  item_refund_amount?: number;
+}
+
+export interface CustomerReturnItem {
+  return_item_id: number;
+  return_id: number;
+  transaction_item_id: number;
+  return_no: string;
+  status: "Pending" | "Approved" | "Rejected" | "Completed" | "Cancelled";
+  reason: string;
+  customer_notes?: string | null;
+  admin_notes?: string | null;
+  created_at: string;
+  date_ymd: string;
+  year_month: string;
+  year: string;
+  month_label: string;
+  month_short: string;
+  month_num: string;
+  formatted_date: string;
+  product_id: number;
+  product_name: string;
+  category_id?: number;
+  category: string;
+  quantity: number;
+  unit_price: number;
+  refund_amount: number;
+  receipt_no: string;
+  transaction_id: number;
+}
+
+export interface CustomerReturnRecord {
+  id: number;
+  return_no: string;
+  transaction_id: number;
+  receipt_no: string;
+  status: "Pending" | "Approved" | "Rejected" | "Completed" | "Cancelled";
+  reason: string;
+  customer_notes?: string | null;
+  admin_notes?: string | null;
+  refund_amount: number;
+  date_ymd: string;
+  year_month: string;
+  year: string;
+  month_label: string;
+  created_at: string;
+  item_count: number;
+  total_items_quantity: number;
+}
+
+export interface CustomerAnalyticsResponse {
+  items: CustomerPurchasedItem[];
+  transactions: Array<{
+    id: number;
+    receipt_no: string;
+    total_amount: number;
+    date_ymd: string;
+    year_month: string;
+    year: string;
+    month_label: string;
+    date: string;
+  }>;
+  return_items?: CustomerReturnItem[];
+  returns?: CustomerReturnRecord[];
 }
 
 export interface BestSellerItem {
@@ -190,6 +282,8 @@ export interface CustomerProfileData {
   date_of_birth: string;
   joined: string;
   username: string;
+  discount_type?: "None" | "Senior Citizen" | "PWD";
+  discount_id_no?: string | null;
 }
 
 export const api = {
@@ -282,8 +376,18 @@ export const api = {
       gender: string;
       civil_status: string;
       date_of_birth: string;
+      discount_type?: "None" | "Senior Citizen" | "PWD";
+      discount_id_no?: string | null;
     }): Promise<{ message: string; profile: CustomerProfileData }> =>
       request("/customers/my-profile", {
+        method: "PUT",
+        body: JSON.stringify(data),
+      }),
+    updateDiscount: (
+      id: number | string,
+      data: { discount_type: "None" | "Senior Citizen" | "PWD"; discount_id_no?: string | null }
+    ): Promise<{ message: string; discount_type: string; discount_id_no: string | null }> =>
+      request(`/customers/${id}/discount`, {
         method: "PUT",
         body: JSON.stringify(data),
       }),
@@ -296,6 +400,8 @@ export const api = {
       civil_status: string;
       gender: string;
       phone: string;
+      discount_type?: "None" | "Senior Citizen" | "PWD";
+      discount_id_no?: string | null;
     }): Promise<{ message: string; customer_id: number }> =>
       request("/customers/register", {
         method: "POST",
@@ -342,6 +448,8 @@ export const api = {
       return request<TransactionItem[]>(`/transactions${query}`);
     },
     getMyHistory: (): Promise<TransactionItem[]> => request<TransactionItem[]>("/transactions/my-history"),
+    getMyAnalytics: (): Promise<CustomerAnalyticsResponse> =>
+      request<CustomerAnalyticsResponse>("/transactions/my-analytics"),
     getItems: (id: number | string) => request(`/transactions/${id}/items`),
     getCustomerTransactions: (customerId: number | string): Promise<TransactionItem[]> =>
       request<TransactionItem[]>(`/transactions/customer/${customerId}`),
@@ -350,6 +458,11 @@ export const api = {
       cashier_id: number;
       cash_tendered: number;
       items: Array<{ product_id: number; quantity: number }>;
+      payment_method?: string;
+      discount_type?: "None" | "Senior Citizen" | "PWD";
+      discount_id_no?: string | null;
+      discount_amount?: number;
+      save_customer_discount?: boolean;
     }): Promise<TransactionItem> =>
       request("/transactions", {
         method: "POST",
