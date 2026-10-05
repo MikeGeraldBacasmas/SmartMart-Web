@@ -4,7 +4,7 @@ import {
   Download, Printer, FileSpreadsheet, FileText, Search, Filter,
   RefreshCw, CheckCircle2, AlertCircle, Eye, X, ArrowUpRight,
   ArrowDownRight, Package, UserCheck, ShieldCheck, CreditCard,
-  Building2, Sparkles, ChevronDown, BarChart2, PieChart as PieChartIcon,
+  Building2, Sparkles, ChevronDown, ChevronLeft, ChevronRight, BarChart2, PieChart as PieChartIcon,
   RotateCcw,
 } from "lucide-react";
 import {
@@ -45,7 +45,22 @@ const formatDateStr = (d: Date): string => {
   return `${year}-${month}-${day}`;
 };
 
-type PresetRange = "today" | "yesterday" | "this_week" | "this_month" | "last_month" | "this_year" | "custom";
+type PresetRange = "today" | "yesterday" | "this_week" | "this_month" | "last_month" | "this_year" | "custom" | "custom_month";
+
+const MONTH_OPTIONS = [
+  { value: 0, label: "January" },
+  { value: 1, label: "February" },
+  { value: 2, label: "March" },
+  { value: 3, label: "April" },
+  { value: 4, label: "May" },
+  { value: 5, label: "June" },
+  { value: 6, label: "July" },
+  { value: 7, label: "August" },
+  { value: 8, label: "September" },
+  { value: 9, label: "October" },
+  { value: 10, label: "November" },
+  { value: 11, label: "December" },
+];
 
 const CATEGORY_COLORS = [
   "#10b981", "#3b82f6", "#8b5cf6", "#f59e0b", "#ec4899",
@@ -107,6 +122,20 @@ export default function ReportsPage() {
     from: formatDateStr(new Date(new Date().getFullYear(), new Date().getMonth(), 1)),
     to: formatDateStr(new Date()),
   });
+
+  const [selectedMonth, setSelectedMonth] = useState<number>(() => new Date().getMonth());
+  const [selectedYear, setSelectedYear] = useState<number>(() => new Date().getFullYear());
+
+  const availableYears = useMemo(() => {
+    const curYear = new Date().getFullYear();
+    const minYear = Math.min(2020, curYear - 6, selectedYear);
+    const maxYear = Math.max(curYear + 2, 2030, selectedYear);
+    const years: number[] = [];
+    for (let y = maxYear; y >= minYear; y--) {
+      years.push(y);
+    }
+    return years;
+  }, [selectedYear]);
 
   // Granularity for overview chart
   const [overviewGroupBy, setOverviewGroupBy] = useState<"daily" | "weekly" | "monthly" | "yearly">("daily");
@@ -181,9 +210,32 @@ export default function ReportsPage() {
     } else if (p === "this_year") {
       f = new Date(now.getFullYear(), 0, 1);
       t = new Date(now.getFullYear(), 11, 31);
+    } else if (p === "custom_month") {
+      let y = selectedYear;
+      let m = selectedMonth;
+      if (appliedDates.from) {
+        const parts = appliedDates.from.split("-");
+        if (parts.length === 3) {
+          const parsedY = parseInt(parts[0], 10);
+          const parsedM = parseInt(parts[1], 10) - 1;
+          if (!isNaN(parsedY) && !isNaN(parsedM) && parsedM >= 0 && parsedM <= 11) {
+            y = parsedY;
+            m = parsedM;
+            setSelectedYear(y);
+            setSelectedMonth(m);
+          }
+        }
+      }
+      f = new Date(y, m, 1);
+      t = new Date(y, m + 1, 0);
+      const fromStr = formatDateStr(f);
+      const toStr = formatDateStr(t);
+      setFromDate(fromStr);
+      setToDate(toStr);
+      setAppliedDates({ from: fromStr, to: toStr });
     }
 
-    if (p !== "custom") {
+    if (p !== "custom" && p !== "custom_month") {
       const fromStr = formatDateStr(f);
       const toStr = formatDateStr(t);
       setFromDate(fromStr);
@@ -205,8 +257,96 @@ export default function ReportsPage() {
     toast.success("Date filter applied!");
   };
 
+  const handleMonthChange = (newMonth: number) => {
+    setSelectedMonth(newMonth);
+    const f = new Date(selectedYear, newMonth, 1);
+    const t = new Date(selectedYear, newMonth + 1, 0);
+    const fromStr = formatDateStr(f);
+    const toStr = formatDateStr(t);
+    setFromDate(fromStr);
+    setToDate(toStr);
+    setAppliedDates({ from: fromStr, to: toStr });
+  };
+
+  const handleYearChange = (newYear: number) => {
+    setSelectedYear(newYear);
+    const f = new Date(newYear, selectedMonth, 1);
+    const t = new Date(newYear, selectedMonth + 1, 0);
+    const fromStr = formatDateStr(f);
+    const toStr = formatDateStr(t);
+    setFromDate(fromStr);
+    setToDate(toStr);
+    setAppliedDates({ from: fromStr, to: toStr });
+  };
+
+  const handlePrevMonth = () => {
+    let nextMonth = selectedMonth - 1;
+    let nextYear = selectedYear;
+    if (nextMonth < 0) {
+      nextMonth = 11;
+      nextYear -= 1;
+    }
+    setSelectedMonth(nextMonth);
+    setSelectedYear(nextYear);
+    const f = new Date(nextYear, nextMonth, 1);
+    const t = new Date(nextYear, nextMonth + 1, 0);
+    const fromStr = formatDateStr(f);
+    const toStr = formatDateStr(t);
+    setFromDate(fromStr);
+    setToDate(toStr);
+    setAppliedDates({ from: fromStr, to: toStr });
+  };
+
+  const handleNextMonth = () => {
+    let nextMonth = selectedMonth + 1;
+    let nextYear = selectedYear;
+    if (nextMonth > 11) {
+      nextMonth = 0;
+      nextYear += 1;
+    }
+    setSelectedMonth(nextMonth);
+    setSelectedYear(nextYear);
+    const f = new Date(nextYear, nextMonth, 1);
+    const t = new Date(nextYear, nextMonth + 1, 0);
+    const fromStr = formatDateStr(f);
+    const toStr = formatDateStr(t);
+    setFromDate(fromStr);
+    setToDate(toStr);
+    setAppliedDates({ from: fromStr, to: toStr });
+  };
+
+  const handleApplyMonthFilter = () => {
+    const f = new Date(selectedYear, selectedMonth, 1);
+    const t = new Date(selectedYear, selectedMonth + 1, 0);
+    const fromStr = formatDateStr(f);
+    const toStr = formatDateStr(t);
+    setFromDate(fromStr);
+    setToDate(toStr);
+    setAppliedDates({ from: fromStr, to: toStr });
+    const monthName = MONTH_OPTIONS[selectedMonth]?.label || "";
+    toast.success(`Filter applied for ${monthName} ${selectedYear}!`);
+  };
+
+  const handleResetMonthFilter = () => {
+    const now = new Date();
+    const curMonth = now.getMonth();
+    const curYear = now.getFullYear();
+    setSelectedMonth(curMonth);
+    setSelectedYear(curYear);
+    const f = new Date(curYear, curMonth, 1);
+    const t = new Date(curYear, curMonth + 1, 0);
+    const fromStr = formatDateStr(f);
+    const toStr = formatDateStr(t);
+    setFromDate(fromStr);
+    setToDate(toStr);
+    setAppliedDates({ from: fromStr, to: toStr });
+    toast.info(`Reset to current month (${MONTH_OPTIONS[curMonth]?.label || ""} ${curYear})`);
+  };
+
   const handleResetFilter = () => {
     handleSelectPreset("this_month");
+    setSelectedMonth(new Date().getMonth());
+    setSelectedYear(new Date().getFullYear());
     setTxSearch("");
     setTxPaymentFilter("All");
     setBestSellerSort("revenue");
@@ -1259,6 +1399,7 @@ export default function ReportsPage() {
               ["last_month", "Last Month"],
               ["this_year", "This Year"],
               ["custom", "Custom Date Range"],
+              ["custom_month", "Custom Month"],
             ] as [PresetRange, string][]).map(([val, lbl]) => (
               <button
                 key={val}
@@ -1279,7 +1420,17 @@ export default function ReportsPage() {
             <span>Filtered Period:</span>
             <span className="font-extrabold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 flex items-center gap-1.5">
               {isRefreshing && <RefreshCw size={11} className="animate-spin text-emerald-600" />}
-              {appliedDates.from} &nbsp;→&nbsp; {appliedDates.to}
+              {preset === "custom_month" ? (
+                <>
+                  <Calendar size={13} className="text-emerald-600 shrink-0" />
+                  <span>{MONTH_OPTIONS[selectedMonth]?.label} {selectedYear}</span>
+                  <span className="text-emerald-700/70 font-mono text-[11px] font-normal">({appliedDates.from} &nbsp;→&nbsp; {appliedDates.to})</span>
+                </>
+              ) : (
+                <>
+                  {appliedDates.from} &nbsp;→&nbsp; {appliedDates.to}
+                </>
+              )}
             </span>
           </div>
         </div>
@@ -1318,6 +1469,92 @@ export default function ReportsPage() {
               >
                 Reset
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* Custom Month & Year Picker Controls */}
+        {preset === "custom_month" && (
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-gray-100 animate-in fade-in duration-200">
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Quick Prev / Next Month Step Controls */}
+              <div className="flex items-center bg-gray-100 rounded-xl p-0.5 border border-gray-200 shadow-2xs">
+                <button
+                  type="button"
+                  onClick={handlePrevMonth}
+                  title="Previous Month"
+                  className="p-1 hover:bg-white text-gray-600 hover:text-gray-900 rounded-lg transition-colors cursor-pointer"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                <span className="px-2 text-xs font-bold text-gray-700 select-none">
+                  {MONTH_OPTIONS[selectedMonth]?.label} {selectedYear}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleNextMonth}
+                  title="Next Month"
+                  className="p-1 hover:bg-white text-gray-600 hover:text-gray-900 rounded-lg transition-colors cursor-pointer"
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+
+              {/* Month Selector */}
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-bold text-gray-500">Month:</label>
+                <select
+                  value={selectedMonth}
+                  onChange={e => handleMonthChange(Number(e.target.value))}
+                  className="px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 cursor-pointer hover:bg-gray-100 transition-colors"
+                >
+                  {MONTH_OPTIONS.map(m => (
+                    <option key={m.value} value={m.value}>
+                      {m.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Year Selector */}
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-bold text-gray-500">Year:</label>
+                <select
+                  value={selectedYear}
+                  onChange={e => handleYearChange(Number(e.target.value))}
+                  className="px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 cursor-pointer hover:bg-gray-100 transition-colors"
+                >
+                  {availableYears.map(y => (
+                    <option key={y} value={y}>
+                      {y}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleApplyMonthFilter}
+                  className="px-4 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 transition-all shadow-sm active:scale-95 flex items-center gap-1.5 cursor-pointer"
+                >
+                  <CheckCircle2 size={13} /> Apply Filter
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResetMonthFilter}
+                  className="px-3 py-1.5 bg-gray-100 text-gray-600 text-xs font-bold rounded-xl hover:bg-gray-200 transition-colors cursor-pointer"
+                >
+                  Reset
+                </button>
+              </div>
+            </div>
+
+            {/* Quick helper indicating period range */}
+            <div className="text-[11px] text-gray-400 font-mono hidden md:flex items-center gap-1.5">
+              <span>Period:</span>
+              <span className="font-bold text-gray-600">{appliedDates.from} &nbsp;→&nbsp; {appliedDates.to}</span>
             </div>
           </div>
         )}
@@ -1490,7 +1727,13 @@ export default function ReportsPage() {
               {salesOverview.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-gray-400 text-xs">
                   <Receipt size={32} className="mb-2 text-gray-300" />
-                  <p>No transaction data available for the selected period.</p>
+                  <p>
+                    No transaction data available for{" "}
+                    {preset === "custom_month"
+                      ? `${MONTH_OPTIONS[selectedMonth]?.label} ${selectedYear}`
+                      : "the selected period"}
+                    .
+                  </p>
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
