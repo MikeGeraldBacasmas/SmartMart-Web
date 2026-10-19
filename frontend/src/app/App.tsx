@@ -1,7 +1,7 @@
 /// <reference path="../vite-env.d.ts" />
 import { useState, useMemo, useCallback, createContext, useContext, useEffect } from "react";
 import { Toaster, toast } from "sonner";
-import { api, getSavedUser, UserPayload, RegisteredCustomer, CustomerProfileData, StaffProfileData, DashboardSummary, TransactionItem, StaffItem } from "../api";
+import { api, resolveBackendUrl, getSavedUser, UserPayload, RegisteredCustomer, CustomerProfileData, StaffProfileData, DashboardSummary, TransactionItem, StaffItem } from "../api";
 import logoImg from "../assets/SmartMart_Logo.jpg";
 import ReportsPage from "./components/reports/ReportsPage";
 import ReturnsManagement from "./components/returns/ReturnsManagement";
@@ -17,11 +17,7 @@ import {
   RotateCcw, Percent, Check, AlertCircle,
 } from "lucide-react";
 
-export const getProductImageUrl = (url?: string | null) => {
-  if (!url) return null;
-  if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:")) return url;
-  return `http://localhost:4000${url}`;
-};
+export const getProductImageUrl = (url?: string | null) => resolveBackendUrl(url);
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

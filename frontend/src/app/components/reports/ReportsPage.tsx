@@ -14,6 +14,7 @@ import {
 import { toast } from "sonner";
 import {
   api,
+  resolveBackendUrl,
   ReportsSummaryResponse,
   SalesOverviewPoint,
   CategorySalesReport,
@@ -1944,7 +1945,7 @@ export default function ReportsPage() {
                             <div className="w-9 h-9 rounded-lg bg-gray-100 border border-gray-200 overflow-hidden flex items-center justify-center shrink-0">
                               {p.image_url ? (
                                 <img
-                                  src={`http://localhost:4000${p.image_url}`}
+                                  src={resolveBackendUrl(p.image_url) ?? undefined}
                                   alt={p.name}
                                   className="w-full h-full object-cover"
                                   onError={e => { (e.target as any).style.display = "none"; }}

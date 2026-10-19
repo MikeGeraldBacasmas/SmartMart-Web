@@ -1,4 +1,14 @@
-const API_BASE = "http://localhost:4000/api";
+// Backend origin is injected at build time from VITE_API_URL (.env.development / .env.production).
+// Falls back to the local dev server when not set.
+export const API_ORIGIN = (import.meta.env.VITE_API_URL || "http://localhost:4000").replace(/\/+$/, "");
+const API_BASE = `${API_ORIGIN}/api`;
+
+// Resolve a backend-relative asset path (e.g. "/uploads/products/x.jpg") to a full URL.
+export const resolveBackendUrl = (url?: string | null): string | null => {
+  if (!url) return null;
+  if (/^(https?:|data:|blob:)/.test(url)) return url;
+  return `${API_ORIGIN}${url.startsWith("/") ? "" : "/"}${url}`;
+};
 
 export interface UserPayload {
   id: number;
