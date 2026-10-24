@@ -79,13 +79,13 @@ const CustomOverviewTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
     return (
-      <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-xl text-xs space-y-1.5 min-w-[160px]">
-        <p className="font-extrabold text-gray-800 border-b border-gray-100 pb-1">{label || data.label}</p>
-        <div className="flex items-center justify-between text-emerald-600 font-bold">
+      <div className="bg-card p-3.5 rounded-xl border border-border shadow-xl text-xs space-y-1.5 min-w-[160px] text-foreground">
+        <p className="font-extrabold text-foreground border-b border-border pb-1">{label || data.label}</p>
+        <div className="flex items-center justify-between text-emerald-500 font-bold">
           <span>Sales:</span>
           <span className="font-mono">{peso(data.total_sales)}</span>
         </div>
-        <div className="flex items-center justify-between text-blue-600 font-medium">
+        <div className="flex items-center justify-between text-blue-500 font-medium">
           <span>Transactions:</span>
           <span className="font-mono">{data.total_transactions} trx</span>
         </div>
@@ -99,10 +99,10 @@ const CustomPieTooltip = ({ active, payload }: any) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
     return (
-      <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-xl text-xs space-y-1">
-        <p className="font-extrabold text-gray-800">{data.category}</p>
-        <p className="text-emerald-600 font-mono font-bold">{peso(data.revenue)}</p>
-        <p className="text-gray-500">{data.items_sold} items ({data.percentage}%)</p>
+      <div className="bg-card p-3 rounded-xl border border-border shadow-xl text-xs space-y-1 text-foreground">
+        <p className="font-extrabold text-foreground">{data.category}</p>
+        <p className="text-emerald-500 font-mono font-bold">{peso(data.revenue)}</p>
+        <p className="text-muted-foreground">{data.items_sold} items ({data.percentage}%)</p>
       </div>
     );
   }
@@ -1330,20 +1330,20 @@ export default function ReportsPage() {
   };
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 space-y-7 bg-[#f9fafb] min-h-full font-sans text-gray-800">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-7 bg-background min-h-full font-sans text-foreground">
       
       {/* ─── 1. PAGE HEADER ─────────────────────────────────────────────────── */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200 pb-5">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border pb-5">
         <div>
           <div className="flex items-center gap-2.5">
             <div className="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center text-white shadow-md shadow-emerald-500/20">
               <TrendingUp size={22} />
             </div>
             <div>
-              <h1 className="text-2xl sm:text-3xl font-extrabold text-[#111827] tracking-tight">
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-foreground tracking-tight">
                 Reports & Analytics
               </h1>
-              <p className="text-xs sm:text-sm text-gray-500 font-medium">
+              <p className="text-xs sm:text-sm text-muted-foreground font-medium">
                 Monitor SmartMart's in-store sales, POS transactions, customer purchases, and staff activity.
               </p>
             </div>
@@ -1352,8 +1352,8 @@ export default function ReportsPage() {
 
         {/* Date / Actions Bar */}
         <div className="flex items-center gap-3 flex-wrap">
-          <div className="px-3.5 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-600 shadow-sm flex items-center gap-2">
-            <Calendar size={14} className="text-emerald-600" />
+          <div className="px-3.5 py-1.5 bg-card border border-border rounded-xl text-xs font-semibold text-muted-foreground shadow-sm flex items-center gap-2">
+            <Calendar size={14} className="text-emerald-500" />
             <span>Today: {new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })}</span>
           </div>
 
@@ -1361,22 +1361,22 @@ export default function ReportsPage() {
           <div className="relative">
             <button
               onClick={() => setShowExportMenu(!showExportMenu)}
-              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-xs sm:text-sm font-bold rounded-xl hover:bg-emerald-700 transition-all shadow-sm shadow-emerald-600/20"
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-xs sm:text-sm font-bold rounded-xl hover:bg-emerald-700 transition-all shadow-sm shadow-emerald-600/20 cursor-pointer"
             >
               <Download size={16} /> Export Report <ChevronDown size={14} />
             </button>
 
             {showExportMenu && (
-              <div className="absolute right-0 mt-2 w-52 bg-white rounded-2xl border border-gray-200 shadow-2xl z-30 p-1.5 space-y-1">
+              <div className="absolute right-0 mt-2 w-52 bg-card rounded-2xl border border-border shadow-2xl z-30 p-1.5 space-y-1">
                 <button
                   onClick={handleExportPrint}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 rounded-xl transition-colors text-left"
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-foreground hover:bg-muted rounded-xl transition-colors text-left cursor-pointer"
                 >
                   <Printer size={15} /> Export as PDF / Print
                 </button>
                 <button
                   onClick={handleExportCSV}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 rounded-xl transition-colors text-left"
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-foreground hover:bg-muted rounded-xl transition-colors text-left cursor-pointer"
                 >
                   <FileSpreadsheet size={15} /> Export Full Report CSV
                 </button>
@@ -1387,7 +1387,7 @@ export default function ReportsPage() {
       </div>
 
       {/* ─── 3. DATE RANGE FILTER BAR ───────────────────────────────────────── */}
-      <div className="bg-white rounded-2xl border border-gray-200 p-4 sm:p-5 shadow-sm space-y-4">
+      <div className="bg-card rounded-2xl border border-border p-4 sm:p-5 shadow-sm space-y-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           
           {/* Preset Buttons */}
@@ -1405,10 +1405,10 @@ export default function ReportsPage() {
               <button
                 key={val}
                 onClick={() => handleSelectPreset(val)}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                   preset === val
                     ? "bg-emerald-600 text-white shadow-sm shadow-emerald-600/20"
-                    : "bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900"
+                    : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
                 }`}
               >
                 {lbl}
@@ -1417,9 +1417,9 @@ export default function ReportsPage() {
           </div>
 
           {/* Active Period Label */}
-          <div className="text-xs font-semibold text-gray-500 flex items-center gap-1.5 self-end lg:self-auto">
+          <div className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5 self-end lg:self-auto">
             <span>Filtered Period:</span>
-            <span className="font-extrabold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 flex items-center gap-1.5">
+            <span className="font-extrabold text-emerald-600 dark:text-emerald-400 bg-emerald-500/15 px-2.5 py-1 rounded-lg border border-emerald-500/30 flex items-center gap-1.5">
               {isRefreshing && <RefreshCw size={11} className="animate-spin text-emerald-600" />}
               {preset === "custom_month" ? (
                 <>
@@ -1593,14 +1593,14 @@ export default function ReportsPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             
             {/* Card 1: Total Sales */}
-            <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+            <div className="bg-card rounded-2xl border border-border p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
               <div className="flex items-center justify-between">
-                <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                <div className="w-11 h-11 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold">
                   <TrendingUp size={22} />
                 </div>
                 {summary?.growth.sales_pct !== undefined && (
                   <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full ${
-                    summary.growth.sales_pct >= 0 ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-red-50 text-red-700 border border-red-200"
+                    summary.growth.sales_pct >= 0 ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30" : "bg-red-500/15 text-red-600 dark:text-red-400 border border-red-500/30"
                   }`}>
                     {summary.growth.sales_pct >= 0 ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}
                     {Math.abs(summary.growth.sales_pct)}% vs prev
@@ -1608,23 +1608,23 @@ export default function ReportsPage() {
                 )}
               </div>
               <div className="mt-4">
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Total Sales</p>
-                <p className="text-2xl sm:text-3xl font-extrabold text-[#111827] mt-1 font-mono tracking-tight">
+                <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Total Sales</p>
+                <p className="text-2xl sm:text-3xl font-extrabold text-foreground mt-1 font-mono tracking-tight">
                   {peso(summary?.current.total_sales || 0)}
                 </p>
-                <p className="text-[11px] text-gray-400 mt-1">From completed in-store POS sales</p>
+                <p className="text-[11px] text-muted-foreground mt-1">From completed in-store POS sales</p>
               </div>
             </div>
 
             {/* Card 2: Total Transactions */}
-            <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+            <div className="bg-card rounded-2xl border border-border p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
               <div className="flex items-center justify-between">
-                <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                <div className="w-11 h-11 rounded-xl bg-blue-500/15 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold">
                   <Receipt size={22} />
                 </div>
                 {summary?.growth.transactions_pct !== undefined && (
                   <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full ${
-                    summary.growth.transactions_pct >= 0 ? "bg-blue-50 text-blue-700 border border-blue-200" : "bg-red-50 text-red-700 border border-red-200"
+                    summary.growth.transactions_pct >= 0 ? "bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30" : "bg-red-500/15 text-red-600 dark:text-red-400 border border-red-500/30"
                   }`}>
                     {summary.growth.transactions_pct >= 0 ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}
                     {Math.abs(summary.growth.transactions_pct)}%
@@ -1632,23 +1632,23 @@ export default function ReportsPage() {
                 )}
               </div>
               <div className="mt-4">
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Total Transactions</p>
-                <p className="text-2xl sm:text-3xl font-extrabold text-[#111827] mt-1 font-mono tracking-tight">
-                  {(summary?.current.total_transactions || 0).toLocaleString()} <span className="text-xs text-gray-400 font-sans font-semibold">Trx</span>
+                <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Total Transactions</p>
+                <p className="text-2xl sm:text-3xl font-extrabold text-foreground mt-1 font-mono tracking-tight">
+                  {(summary?.current.total_transactions || 0).toLocaleString()} <span className="text-xs text-muted-foreground font-sans font-semibold">Trx</span>
                 </p>
-                <p className="text-[11px] text-gray-400 mt-1">Completed cashier checkouts</p>
+                <p className="text-[11px] text-muted-foreground mt-1">Completed cashier checkouts</p>
               </div>
             </div>
 
             {/* Card 3: Products Sold */}
-            <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+            <div className="bg-card rounded-2xl border border-border p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
               <div className="flex items-center justify-between">
-                <div className="w-11 h-11 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
+                <div className="w-11 h-11 rounded-xl bg-purple-500/15 text-purple-600 dark:text-purple-400 flex items-center justify-center font-bold">
                   <ShoppingBag size={22} />
                 </div>
                 {summary?.growth.products_sold_pct !== undefined && (
                   <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full ${
-                    summary.growth.products_sold_pct >= 0 ? "bg-purple-50 text-purple-700 border border-purple-200" : "bg-red-50 text-red-700 border border-red-200"
+                    summary.growth.products_sold_pct >= 0 ? "bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30" : "bg-red-500/15 text-red-600 dark:text-red-400 border border-red-500/30"
                   }`}>
                     {summary.growth.products_sold_pct >= 0 ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}
                     {Math.abs(summary.growth.products_sold_pct)}%
@@ -1656,57 +1656,57 @@ export default function ReportsPage() {
                 )}
               </div>
               <div className="mt-4">
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Products Sold</p>
-                <p className="text-2xl sm:text-3xl font-extrabold text-[#111827] mt-1 font-mono tracking-tight">
-                  {(summary?.current.products_sold || 0).toLocaleString()} <span className="text-xs text-gray-400 font-sans font-semibold">Items</span>
+                <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Products Sold</p>
+                <p className="text-2xl sm:text-3xl font-extrabold text-foreground mt-1 font-mono tracking-tight">
+                  {(summary?.current.products_sold || 0).toLocaleString()} <span className="text-xs text-muted-foreground font-sans font-semibold">Items</span>
                 </p>
-                <p className="text-[11px] text-gray-400 mt-1">Total item quantity dispensed</p>
+                <p className="text-[11px] text-muted-foreground mt-1">Total item quantity dispensed</p>
               </div>
             </div>
 
             {/* Card 4: Customers Served */}
-            <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+            <div className="bg-card rounded-2xl border border-border p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
               <div className="flex items-center justify-between">
-                <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+                <div className="w-11 h-11 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold">
                   <Users size={22} />
                 </div>
-                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
                   {summary?.current.registered_customers_served || 0} Registered
                 </span>
               </div>
               <div className="mt-4">
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Customers Served</p>
-                <p className="text-2xl sm:text-3xl font-extrabold text-[#111827] mt-1 font-mono tracking-tight">
-                  {(summary?.current.customers_served || 0).toLocaleString()} <span className="text-xs text-gray-400 font-sans font-semibold">Customers</span>
+                <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Customers Served</p>
+                <p className="text-2xl sm:text-3xl font-extrabold text-foreground mt-1 font-mono tracking-tight">
+                  {(summary?.current.customers_served || 0).toLocaleString()} <span className="text-xs text-muted-foreground font-sans font-semibold">Customers</span>
                 </p>
-                <p className="text-[11px] text-gray-400 mt-1">Unique shoppers in period</p>
+                <p className="text-[11px] text-muted-foreground mt-1">Unique shoppers in period</p>
               </div>
             </div>
           </div>
 
           {/* ─── 4. SALES OVERVIEW (LARGE INTERACTIVE CHART) ──────────────────── */}
-          <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6 shadow-sm space-y-4">
+          <div className="bg-card rounded-2xl border border-border p-5 sm:p-6 shadow-sm space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2">
-                  <BarChart2 size={20} className="text-emerald-600" />
-                  <h2 className="text-lg font-extrabold text-[#111827]">In-Store Sales Overview</h2>
+                  <BarChart2 size={20} className="text-emerald-500" />
+                  <h2 className="text-lg font-extrabold text-foreground">In-Store Sales Overview</h2>
                 </div>
-                <p className="text-xs text-gray-400 mt-0.5">
+                <p className="text-xs text-muted-foreground mt-0.5">
                   Actual completed physical POS transactions over time
                 </p>
               </div>
 
               {/* Granularity switch */}
-              <div className="flex bg-gray-100 p-1 rounded-xl self-start sm:self-auto">
+              <div className="flex bg-muted/60 p-1 rounded-xl border border-border self-start sm:self-auto">
                 {(["daily", "weekly", "monthly", "yearly"] as const).map(g => (
                   <button
                     key={g}
                     onClick={() => setOverviewGroupBy(g)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize transition-all ${
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize transition-all cursor-pointer ${
                       overviewGroupBy === g
-                        ? "bg-white text-emerald-700 shadow-sm"
-                        : "text-gray-500 hover:text-gray-800"
+                        ? "bg-card text-foreground shadow-sm border border-border/60"
+                        : "text-muted-foreground hover:text-foreground"
                     }`}
                   >
                     {g}
@@ -1782,11 +1782,11 @@ export default function ReportsPage() {
                 <div>
                   <div className="flex items-center gap-2">
                     <PieChartIcon size={20} className="text-emerald-600" />
-                    <h2 className="text-lg font-extrabold text-[#111827]">Sales by Category</h2>
+                    <h2 className="text-lg font-extrabold text-foreground">Sales by Category</h2>
                   </div>
-                  <p className="text-xs text-gray-400 mt-0.5">Revenue distribution across product lines</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Revenue distribution across product lines</p>
                 </div>
-                <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 font-mono">
+                <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/15 px-2.5 py-1 rounded-lg border border-emerald-500/30 font-mono">
                   {peso(categorySales?.total_revenue || 0)} Total
                 </span>
               </div>
@@ -1795,7 +1795,7 @@ export default function ReportsPage() {
                 {/* Donut Chart */}
                 <div className="h-64 w-full flex items-center justify-center">
                   {!categorySales?.categories.length ? (
-                    <p className="text-xs text-gray-400">No category sales in period.</p>
+                    <p className="text-xs text-muted-foreground">No category sales in period.</p>
                   ) : (
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
@@ -1820,9 +1820,9 @@ export default function ReportsPage() {
                 </div>
 
                 {/* Table Breakdown */}
-                <div className="max-h-64 overflow-y-auto space-y-2 pr-1 divide-y divide-gray-100">
+                <div className="max-h-64 overflow-y-auto space-y-2 pr-1 divide-y divide-border">
                   {!categorySales?.categories.length ? (
-                    <p className="text-xs text-gray-400">No categories found.</p>
+                    <p className="text-xs text-muted-foreground">No categories found.</p>
                   ) : (
                     categorySales.categories.map((c, i) => (
                       <div key={c.category} className="pt-2 first:pt-0 flex items-center justify-between text-xs">
@@ -1831,11 +1831,11 @@ export default function ReportsPage() {
                             className="w-3 h-3 rounded-md shrink-0"
                             style={{ backgroundColor: CATEGORY_COLORS[i % CATEGORY_COLORS.length] }}
                           />
-                          <span className="font-bold text-gray-800 truncate">{c.category}</span>
+                          <span className="font-bold text-foreground truncate">{c.category}</span>
                         </div>
                         <div className="text-right shrink-0">
-                          <p className="font-extrabold text-gray-900 font-mono">{peso(c.revenue)}</p>
-                          <p className="text-[10px] text-gray-400">{c.items_sold} items • {c.percentage}%</p>
+                          <p className="font-extrabold text-foreground font-mono">{peso(c.revenue)}</p>
+                          <p className="text-[10px] text-muted-foreground">{c.items_sold} items • {c.percentage}%</p>
                         </div>
                       </div>
                     ))
@@ -1845,13 +1845,13 @@ export default function ReportsPage() {
             </div>
 
             {/* 11. In-Store Payment (Cash Only) (1 col) */}
-            <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6 shadow-sm space-y-4">
+            <div className="bg-card rounded-2xl border border-border p-5 sm:p-6 shadow-sm space-y-4">
               <div>
                 <div className="flex items-center gap-2">
-                  <CreditCard size={20} className="text-emerald-600" />
-                  <h2 className="text-lg font-extrabold text-[#111827]">In-Store Payment</h2>
+                  <CreditCard size={20} className="text-emerald-500" />
+                  <h2 className="text-lg font-extrabold text-foreground">In-Store Payment</h2>
                 </div>
-                <p className="text-xs text-gray-400 mt-0.5">Physical walk-in POS transactions (Cash Only)</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Physical walk-in POS transactions (Cash Only)</p>
               </div>
 
               <div className="space-y-3">
@@ -1876,8 +1876,8 @@ export default function ReportsPage() {
                   </div>
                 </div>
 
-                <div className="p-3 bg-gray-50 rounded-xl border border-gray-100 text-[11px] text-gray-500 space-y-1">
-                  <p className="font-bold text-gray-700">Store Payment Policy</p>
+                <div className="p-3 bg-muted/40 rounded-xl border border-border text-[11px] text-muted-foreground space-y-1">
+                  <p className="font-bold text-foreground">Store Payment Policy</p>
                   <p>All in-store walk-in POS purchases are settled strictly via cash tender.</p>
                 </div>
               </div>
@@ -1885,23 +1885,23 @@ export default function ReportsPage() {
           </div>
 
           {/* ─── 6. BEST-SELLING PRODUCTS ────────────────────────────────────── */}
-          <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6 shadow-sm space-y-4">
+          <div className="bg-card rounded-2xl border border-border p-5 sm:p-6 shadow-sm space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2">
-                  <Package size={20} className="text-emerald-600" />
-                  <h2 className="text-lg font-extrabold text-[#111827]">Best-Selling Products</h2>
+                  <Package size={20} className="text-emerald-500" />
+                  <h2 className="text-lg font-extrabold text-foreground">Best-Selling Products</h2>
                 </div>
-                <p className="text-xs text-gray-400 mt-0.5">Top-performing products ranked by sales</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Top-performing products ranked by sales</p>
               </div>
 
               {/* Sort buttons */}
-              <div className="flex items-center gap-2 bg-gray-100 p-1 rounded-xl text-xs font-bold">
-                <span className="text-gray-400 px-2">Sort by:</span>
+              <div className="flex items-center gap-2 bg-muted/60 p-1 rounded-xl text-xs font-bold border border-border">
+                <span className="text-muted-foreground px-2">Sort by:</span>
                 <button
                   onClick={() => setBestSellerSort("revenue")}
                   className={`px-3 py-1.5 rounded-lg transition-all ${
-                    bestSellerSort === "revenue" ? "bg-white text-emerald-700 shadow-sm" : "text-gray-500 hover:text-gray-800"
+                    bestSellerSort === "revenue" ? "bg-card text-emerald-500 shadow-sm" : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   Revenue
@@ -1909,7 +1909,7 @@ export default function ReportsPage() {
                 <button
                   onClick={() => setBestSellerSort("quantity")}
                   className={`px-3 py-1.5 rounded-lg transition-all ${
-                    bestSellerSort === "quantity" ? "bg-white text-emerald-700 shadow-sm" : "text-gray-500 hover:text-gray-800"
+                    bestSellerSort === "quantity" ? "bg-card text-emerald-500 shadow-sm" : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   Quantity Sold
@@ -1920,7 +1920,7 @@ export default function ReportsPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50 text-gray-500 font-extrabold uppercase tracking-wider text-left">
+                  <tr className="border-b border-border bg-muted/40 text-muted-foreground font-extrabold uppercase tracking-wider text-left">
                     <th className="py-3 px-4">Product</th>
                     <th className="py-3 px-4">Category</th>
                     <th className="py-3 px-4 text-right">Unit Price</th>
@@ -1929,20 +1929,20 @@ export default function ReportsPage() {
                     <th className="py-3 px-4 text-center">Current Stock</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-border/60">
                   {sortedBestSellers.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-8 text-center text-gray-400">
+                      <td colSpan={6} className="py-8 text-center text-muted-foreground">
                         No product sales recorded in this period.
                       </td>
                     </tr>
                   ) : (
                     sortedBestSellers.map((p, idx) => (
-                      <tr key={p.id} className="hover:bg-gray-50 transition-colors">
+                      <tr key={p.id} className="hover:bg-muted/30 transition-colors">
                         <td className="py-3 px-4">
                           <div className="flex items-center gap-3">
-                            <span className="font-mono text-gray-400 font-bold w-4">#{idx + 1}</span>
-                            <div className="w-9 h-9 rounded-lg bg-gray-100 border border-gray-200 overflow-hidden flex items-center justify-center shrink-0">
+                            <span className="font-mono text-muted-foreground font-bold w-4">#{idx + 1}</span>
+                            <div className="w-9 h-9 rounded-lg bg-muted border border-border overflow-hidden flex items-center justify-center shrink-0">
                               {p.image_url ? (
                                 <img
                                   src={resolveBackendUrl(p.image_url) ?? undefined}
@@ -1951,33 +1951,33 @@ export default function ReportsPage() {
                                   onError={e => { (e.target as any).style.display = "none"; }}
                                 />
                               ) : (
-                                <Package size={16} className="text-gray-400" />
+                                <Package size={16} className="text-muted-foreground" />
                               )}
                             </div>
-                            <span className="font-extrabold text-gray-900">{p.name}</span>
+                            <span className="font-extrabold text-foreground">{p.name}</span>
                           </div>
                         </td>
                         <td className="py-3 px-4">
-                          <span className="px-2.5 py-1 rounded-lg bg-gray-100 text-gray-700 font-semibold">
+                          <span className="px-2.5 py-1 rounded-lg bg-muted text-muted-foreground font-semibold">
                             {p.category}
                           </span>
                         </td>
-                        <td className="py-3 px-4 text-right font-mono font-medium text-gray-600">
+                        <td className="py-3 px-4 text-right font-mono font-medium text-muted-foreground">
                           {peso(p.price)}
                         </td>
-                        <td className="py-3 px-4 text-right font-mono font-extrabold text-gray-900">
+                        <td className="py-3 px-4 text-right font-mono font-extrabold text-foreground">
                           {p.quantity_sold.toLocaleString()}
                         </td>
-                        <td className="py-3 px-4 text-right font-mono font-extrabold text-emerald-600">
+                        <td className="py-3 px-4 text-right font-mono font-extrabold text-emerald-500">
                           {peso(p.total_revenue)}
                         </td>
                         <td className="py-3 px-4 text-center">
                           <span className={`px-2 py-0.5 rounded-full font-bold font-mono ${
                             p.stock <= 0
-                              ? "bg-red-50 text-red-700 border border-red-200"
+                              ? "bg-red-500/10 text-red-500 border border-red-500/20"
                               : p.stock <= p.low_stock_threshold
-                              ? "bg-amber-50 text-amber-700 border border-amber-200"
-                              : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                              ? "bg-amber-500/10 text-amber-500 border border-amber-500/20"
+                              : "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
                           }`}>
                             {p.stock} in stock
                           </span>
@@ -1994,79 +1994,79 @@ export default function ReportsPage() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             
             {/* Customer Activity Metrics (1 col) */}
-            <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6 shadow-sm space-y-4">
+            <div className="bg-card rounded-2xl border border-border p-5 sm:p-6 shadow-sm space-y-4">
               <div>
                 <div className="flex items-center gap-2">
-                  <UserCheck size={20} className="text-emerald-600" />
-                  <h2 className="text-lg font-extrabold text-[#111827]">Customer Purchase Activity</h2>
+                  <UserCheck size={20} className="text-emerald-500" />
+                  <h2 className="text-lg font-extrabold text-foreground">Customer Purchase Activity</h2>
                 </div>
-                <p className="text-xs text-gray-400 mt-0.5">
+                <p className="text-xs text-muted-foreground mt-0.5">
                   Decoupled from browsing: counts completed POS purchases only
                 </p>
               </div>
 
               <div className="space-y-3">
-                <div className="p-3.5 bg-gray-50 rounded-xl border border-gray-200 flex justify-between items-center">
+                <div className="p-3.5 bg-muted/40 rounded-xl border border-border flex justify-between items-center">
                   <div>
-                    <p className="text-xs font-bold text-gray-500">Total Registered Customers</p>
-                    <p className="text-lg font-extrabold text-gray-900 mt-0.5 font-mono">
+                    <p className="text-xs font-bold text-muted-foreground">Total Registered Customers</p>
+                    <p className="text-lg font-extrabold text-foreground mt-0.5 font-mono">
                       {customerActivity?.summary.total_registered || 0}
                     </p>
                   </div>
-                  <Users size={20} className="text-gray-400" />
+                  <Users size={20} className="text-muted-foreground" />
                 </div>
 
-                <div className="p-3.5 bg-emerald-50 rounded-xl border border-emerald-200 flex justify-between items-center">
+                <div className="p-3.5 bg-emerald-500/10 rounded-xl border border-emerald-500/20 flex justify-between items-center">
                   <div>
-                    <p className="text-xs font-bold text-emerald-800">Customers Who Purchased</p>
-                    <p className="text-lg font-extrabold text-emerald-900 mt-0.5 font-mono">
+                    <p className="text-xs font-bold text-emerald-500">Customers Who Purchased</p>
+                    <p className="text-lg font-extrabold text-foreground mt-0.5 font-mono">
                       {customerActivity?.summary.purchased_in_period || 0}
                     </p>
                   </div>
-                  <ShoppingBag size={20} className="text-emerald-600" />
+                  <ShoppingBag size={20} className="text-emerald-500" />
                 </div>
 
-                <div className="p-3.5 bg-blue-50 rounded-xl border border-blue-200 flex justify-between items-center">
+                <div className="p-3.5 bg-blue-500/10 rounded-xl border border-blue-500/20 flex justify-between items-center">
                   <div>
-                    <p className="text-xs font-bold text-blue-800">Returning Customers</p>
-                    <p className="text-lg font-extrabold text-blue-900 mt-0.5 font-mono">
+                    <p className="text-xs font-bold text-blue-500">Returning Customers</p>
+                    <p className="text-lg font-extrabold text-foreground mt-0.5 font-mono">
                       {customerActivity?.summary.returning_customers || 0}
                     </p>
                   </div>
-                  <CheckCircle2 size={20} className="text-blue-600" />
+                  <CheckCircle2 size={20} className="text-blue-500" />
                 </div>
 
-                <div className="p-3.5 bg-purple-50 rounded-xl border border-purple-200 flex justify-between items-center">
+                <div className="p-3.5 bg-purple-500/10 rounded-xl border border-purple-500/20 flex justify-between items-center">
                   <div>
-                    <p className="text-xs font-bold text-purple-800">New Customers</p>
-                    <p className="text-lg font-extrabold text-purple-900 mt-0.5 font-mono">
+                    <p className="text-xs font-bold text-purple-500">New Customers</p>
+                    <p className="text-lg font-extrabold text-foreground mt-0.5 font-mono">
                       {customerActivity?.summary.new_customers || 0}
                     </p>
                   </div>
-                  <Sparkles size={20} className="text-purple-600" />
+                  <Sparkles size={20} className="text-purple-500" />
                 </div>
               </div>
             </div>
 
             {/* Top Customers (2 cols) */}
-            <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-200 p-5 sm:p-6 shadow-sm space-y-4">
+            <div className="lg:col-span-2 bg-card rounded-2xl border border-border p-5 sm:p-6 shadow-sm space-y-4">
               <div className="flex items-center justify-between">
                 <div>
                   <div className="flex items-center gap-2">
-                    <Users size={20} className="text-emerald-600" />
-                    <h2 className="text-lg font-extrabold text-[#111827]">Top Customers</h2>
+                    <Users size={20} className="text-emerald-500" />
+                    <h2 className="text-lg font-extrabold text-foreground">Top Customers</h2>
                   </div>
-                  <p className="text-xs text-gray-400 mt-0.5">Ranked by actual in-store POS transaction spend</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Ranked by actual in-store POS transaction spend</p>
                 </div>
-                <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2.5 py-1 rounded-lg">
+                <span className="text-xs font-bold text-muted-foreground bg-muted px-2.5 py-1 rounded-lg border border-border">
                   {customerActivity?.top_customers.length || 0} Customers
                 </span>
               </div>
 
               <div className="overflow-x-auto max-h-64">
                 <table className="w-full text-xs">
-                  <thead className="sticky top-0 bg-gray-50 border-b border-gray-200">
-                    <tr className="text-gray-500 font-extrabold uppercase tracking-wider text-left">
+                  <thead className="sticky top-0 bg-muted/60 border-b border-border">
+                    <tr className="text-muted-foreground font-extrabold uppercase tracking-wider text-left">
                       <th className="py-2.5 px-3">Customer</th>
                       <th className="py-2.5 px-3 text-center">Transactions</th>
                       <th className="py-2.5 px-3 text-center">Items Bought</th>
@@ -2074,30 +2074,30 @@ export default function ReportsPage() {
                       <th className="py-2.5 px-3 text-right">Last Purchase</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100">
+                  <tbody className="divide-y divide-border/60">
                     {!customerActivity?.top_customers.length ? (
                       <tr>
-                        <td colSpan={5} className="py-6 text-center text-gray-400">
+                        <td colSpan={5} className="py-6 text-center text-muted-foreground">
                           No customer purchase activity recorded in this period.
                         </td>
                       </tr>
                     ) : (
                       customerActivity.top_customers.map(c => (
-                        <tr key={c.id} className="hover:bg-gray-50 transition-colors">
+                        <tr key={c.id} className="hover:bg-muted/30 transition-colors">
                           <td className="py-2.5 px-3">
-                            <p className="font-extrabold text-gray-900">{c.name}</p>
-                            <p className="text-[10px] text-gray-400 font-mono">{c.customer_code}</p>
+                            <p className="font-extrabold text-foreground">{c.name}</p>
+                            <p className="text-[10px] text-muted-foreground font-mono">{c.customer_code}</p>
                           </td>
-                          <td className="py-2.5 px-3 text-center font-mono font-bold text-gray-800">
+                          <td className="py-2.5 px-3 text-center font-mono font-bold text-foreground">
                             {c.transactions_count}
                           </td>
-                          <td className="py-2.5 px-3 text-center font-mono text-gray-600">
+                          <td className="py-2.5 px-3 text-center font-mono text-muted-foreground">
                             {c.items_purchased}
                           </td>
-                          <td className="py-2.5 px-3 text-right font-mono font-extrabold text-emerald-600">
+                          <td className="py-2.5 px-3 text-right font-mono font-extrabold text-emerald-500">
                             {peso(c.total_spent)}
                           </td>
-                          <td className="py-2.5 px-3 text-right text-gray-500">
+                          <td className="py-2.5 px-3 text-right text-muted-foreground">
                             {c.last_purchase_date}
                           </td>
                         </tr>
@@ -2110,13 +2110,13 @@ export default function ReportsPage() {
           </div>
 
           {/* ─── 10. STAFF POS PERFORMANCE ───────────────────────────────────── */}
-          <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6 shadow-sm space-y-4">
+          <div className="bg-card rounded-2xl border border-border p-5 sm:p-6 shadow-sm space-y-4">
             <div>
               <div className="flex items-center gap-2">
-                <ShieldCheck size={20} className="text-emerald-600" />
-                <h2 className="text-lg font-extrabold text-[#111827]">Staff POS Performance</h2>
+                <ShieldCheck size={20} className="text-emerald-500" />
+                <h2 className="text-lg font-extrabold text-foreground">Staff POS Performance</h2>
               </div>
-              <p className="text-xs text-gray-400 mt-0.5">
+              <p className="text-xs text-muted-foreground mt-0.5">
                 POS throughput and register activity processed by staff cashiers
               </p>
             </div>
@@ -2124,7 +2124,7 @@ export default function ReportsPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50 text-gray-500 font-extrabold uppercase tracking-wider text-left">
+                  <tr className="border-b border-border bg-muted/40 text-muted-foreground font-extrabold uppercase tracking-wider text-left">
                     <th className="py-3 px-4">Staff Member</th>
                     <th className="py-3 px-4 text-center">Status</th>
                     <th className="py-3 px-4 text-center">Transactions Processed</th>
@@ -2133,37 +2133,37 @@ export default function ReportsPage() {
                     <th className="py-3 px-4 text-right">Last Transaction</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-border/60">
                   {staffPerformance.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-6 text-center text-gray-400">
+                      <td colSpan={6} className="py-6 text-center text-muted-foreground">
                         No staff activity found.
                       </td>
                     </tr>
                   ) : (
                     staffPerformance.map(s => (
-                      <tr key={s.id} className="hover:bg-gray-50 transition-colors">
+                      <tr key={s.id} className="hover:bg-muted/30 transition-colors">
                         <td className="py-3 px-4">
-                          <p className="font-extrabold text-gray-900">{s.name}</p>
-                          <p className="text-[10px] text-gray-400 font-mono">{s.staff_code} • {s.role}</p>
+                          <p className="font-extrabold text-foreground">{s.name}</p>
+                          <p className="text-[10px] text-muted-foreground font-mono">{s.staff_code} • {s.role}</p>
                         </td>
                         <td className="py-3 px-4 text-center">
                           <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
-                            s.status === "Active" ? "bg-emerald-100 text-emerald-800" : "bg-gray-100 text-gray-600"
+                            s.status === "Active" ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20" : "bg-muted text-muted-foreground"
                           }`}>
                             {s.status}
                           </span>
                         </td>
-                        <td className="py-3 px-4 text-center font-mono font-extrabold text-gray-900">
+                        <td className="py-3 px-4 text-center font-mono font-extrabold text-foreground">
                           {s.transactions_count}
                         </td>
-                        <td className="py-3 px-4 text-right font-mono font-extrabold text-emerald-600">
+                        <td className="py-3 px-4 text-right font-mono font-extrabold text-emerald-500">
                           {peso(s.total_sales)}
                         </td>
-                        <td className="py-3 px-4 text-right font-mono font-semibold text-gray-700">
+                        <td className="py-3 px-4 text-right font-mono font-semibold text-muted-foreground">
                           {peso(s.avg_transaction_value)}
                         </td>
-                        <td className="py-3 px-4 text-right text-gray-500">
+                        <td className="py-3 px-4 text-right text-muted-foreground">
                           {s.last_transaction}
                         </td>
                       </tr>
@@ -2178,12 +2178,12 @@ export default function ReportsPage() {
           {returnsData && (
             <div className="space-y-4">
               {/* Returns Section Header */}
-              <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6 shadow-sm space-y-5">
+              <div className="bg-card rounded-2xl border border-border p-5 sm:p-6 shadow-sm space-y-5">
                 <div className="flex items-center gap-2">
                   <RotateCcw size={20} className="text-orange-500" />
-                  <h2 className="text-lg font-extrabold text-[#111827]">Returns & Refunds Analytics</h2>
+                  <h2 className="text-lg font-extrabold text-foreground">Returns & Refunds Analytics</h2>
                   {returnsData.summary.pending_count > 0 && (
-                    <span className="ml-auto px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-extrabold border border-amber-200 animate-pulse">
+                    <span className="ml-auto px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-500 text-[10px] font-extrabold border border-amber-500/20 animate-pulse">
                       {returnsData.summary.pending_count} Pending
                     </span>
                   )}
@@ -2191,29 +2191,29 @@ export default function ReportsPage() {
 
                 {/* Returns Summary Cards */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                  <div className="bg-gradient-to-br from-orange-50 to-orange-100/50 rounded-xl border border-orange-200 p-3.5 text-center">
+                  <div className="bg-orange-500/10 rounded-xl border border-orange-500/20 p-3.5 text-center">
                     <p className="text-[10px] font-bold text-orange-400 uppercase tracking-wider">Total Returns</p>
-                    <p className="text-xl font-extrabold text-orange-700 mt-1 font-mono">{returnsData.summary.total_returns}</p>
+                    <p className="text-xl font-extrabold text-orange-500 mt-1 font-mono">{returnsData.summary.total_returns}</p>
                   </div>
-                  <div className="bg-gradient-to-br from-amber-50 to-amber-100/50 rounded-xl border border-amber-200 p-3.5 text-center">
+                  <div className="bg-amber-500/10 rounded-xl border border-amber-500/20 p-3.5 text-center">
                     <p className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">Pending</p>
-                    <p className="text-xl font-extrabold text-amber-700 mt-1 font-mono">{returnsData.summary.pending_count}</p>
+                    <p className="text-xl font-extrabold text-amber-500 mt-1 font-mono">{returnsData.summary.pending_count}</p>
                   </div>
-                  <div className="bg-gradient-to-br from-emerald-50 to-emerald-100/50 rounded-xl border border-emerald-200 p-3.5 text-center">
+                  <div className="bg-emerald-500/10 rounded-xl border border-emerald-500/20 p-3.5 text-center">
                     <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">Approved</p>
-                    <p className="text-xl font-extrabold text-emerald-700 mt-1 font-mono">{returnsData.summary.approved_count}</p>
+                    <p className="text-xl font-extrabold text-emerald-500 mt-1 font-mono">{returnsData.summary.approved_count}</p>
                   </div>
-                  <div className="bg-gradient-to-br from-red-50 to-red-100/50 rounded-xl border border-red-200 p-3.5 text-center">
+                  <div className="bg-red-500/10 rounded-xl border border-red-500/20 p-3.5 text-center">
                     <p className="text-[10px] font-bold text-red-400 uppercase tracking-wider">Rejected</p>
-                    <p className="text-xl font-extrabold text-red-700 mt-1 font-mono">{returnsData.summary.rejected_count}</p>
+                    <p className="text-xl font-extrabold text-red-500 mt-1 font-mono">{returnsData.summary.rejected_count}</p>
                   </div>
-                  <div className="bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-xl border border-blue-200 p-3.5 text-center">
+                  <div className="bg-blue-500/10 rounded-xl border border-blue-500/20 p-3.5 text-center">
                     <p className="text-[10px] font-bold text-blue-400 uppercase tracking-wider">Total Refunded</p>
-                    <p className="text-lg font-extrabold text-blue-700 mt-1 font-mono">{peso(returnsData.summary.total_refunded)}</p>
+                    <p className="text-lg font-extrabold text-blue-500 mt-1 font-mono">{peso(returnsData.summary.total_refunded)}</p>
                   </div>
-                  <div className="bg-gradient-to-br from-purple-50 to-purple-100/50 rounded-xl border border-purple-200 p-3.5 text-center">
+                  <div className="bg-purple-500/10 rounded-xl border border-purple-500/20 p-3.5 text-center">
                     <p className="text-[10px] font-bold text-purple-400 uppercase tracking-wider">Items Returned</p>
-                    <p className="text-xl font-extrabold text-purple-700 mt-1 font-mono">{returnsData.summary.items_returned_count}</p>
+                    <p className="text-xl font-extrabold text-purple-500 mt-1 font-mono">{returnsData.summary.items_returned_count}</p>
                   </div>
                 </div>
 
@@ -2221,8 +2221,8 @@ export default function ReportsPage() {
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                   {/* Return Reasons Breakdown */}
                   {returnsData.reasons.length > 0 && (
-                    <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 space-y-3">
-                      <h3 className="text-sm font-extrabold text-gray-800 flex items-center gap-1.5">
+                    <div className="bg-muted/40 rounded-xl border border-border p-4 space-y-3">
+                      <h3 className="text-sm font-extrabold text-foreground flex items-center gap-1.5">
                         <PieChartIcon size={14} className="text-orange-500" />
                         Return Reasons Breakdown
                       </h3>
@@ -2233,12 +2233,12 @@ export default function ReportsPage() {
                           return (
                             <div key={i} className="space-y-1">
                               <div className="flex items-center justify-between text-xs">
-                                <span className="font-bold text-gray-700 truncate pr-2">{r.reason}</span>
-                                <span className="font-mono font-extrabold text-gray-900 shrink-0">
-                                  {r.count} <span className="text-gray-400 font-sans">({pct}%)</span>
+                                <span className="font-bold text-foreground truncate pr-2">{r.reason}</span>
+                                <span className="font-mono font-extrabold text-foreground shrink-0">
+                                  {r.count} <span className="text-muted-foreground font-sans">({pct}%)</span>
                                 </span>
                               </div>
-                              <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                              <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
                                 <div
                                   className="h-full rounded-full transition-all duration-500"
                                   style={{
@@ -2247,7 +2247,7 @@ export default function ReportsPage() {
                                   }}
                                 />
                               </div>
-                              <div className="flex items-center gap-3 text-[10px] text-gray-400">
+                              <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
                                 <span>{r.items_count} items</span>
                                 <span>Refunded: {peso(r.refund_amount)}</span>
                               </div>
@@ -2260,15 +2260,15 @@ export default function ReportsPage() {
 
                   {/* Top Returned Products */}
                   {returnsData.top_returned_products.length > 0 && (
-                    <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 space-y-3">
-                      <h3 className="text-sm font-extrabold text-gray-800 flex items-center gap-1.5">
+                    <div className="bg-muted/40 rounded-xl border border-border p-4 space-y-3">
+                      <h3 className="text-sm font-extrabold text-foreground flex items-center gap-1.5">
                         <Package size={14} className="text-red-500" />
                         Top Returned Products
                       </h3>
                       <div className="overflow-x-auto">
                         <table className="w-full text-xs">
                           <thead>
-                            <tr className="border-b border-gray-200 text-gray-500 font-extrabold uppercase tracking-wider text-left">
+                            <tr className="border-b border-border text-muted-foreground font-extrabold uppercase tracking-wider text-left">
                               <th className="py-2 px-2">Product</th>
                               <th className="py-2 px-2 text-center">Returns</th>
                               <th className="py-2 px-2 text-center">Qty</th>
@@ -2276,17 +2276,17 @@ export default function ReportsPage() {
                               <th className="py-2 px-2 text-right">Refund</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-gray-100">
+                          <tbody className="divide-y divide-border/60">
                             {returnsData.top_returned_products.map((p, i) => (
-                              <tr key={i} className="hover:bg-white transition-colors">
+                              <tr key={i} className="hover:bg-muted/30 transition-colors">
                                 <td className="py-2 px-2">
-                                  <p className="font-bold text-gray-800">{p.product_name}</p>
-                                  <p className="text-[10px] text-gray-400">{p.category}</p>
+                                  <p className="font-bold text-foreground">{p.product_name}</p>
+                                  <p className="text-[10px] text-muted-foreground">{p.category}</p>
                                 </td>
-                                <td className="py-2 px-2 text-center font-mono font-bold text-gray-700">{p.return_occurrences}</td>
-                                <td className="py-2 px-2 text-center font-mono font-bold text-red-600">{p.total_quantity_returned}</td>
-                                <td className="py-2 px-2 text-center font-mono font-bold text-emerald-600">{p.total_restocked_quantity}</td>
-                                <td className="py-2 px-2 text-right font-mono font-extrabold text-gray-900">{peso(p.total_refund_amount)}</td>
+                                <td className="py-2 px-2 text-center font-mono font-bold text-muted-foreground">{p.return_occurrences}</td>
+                                <td className="py-2 px-2 text-center font-mono font-bold text-red-500">{p.total_quantity_returned}</td>
+                                <td className="py-2 px-2 text-center font-mono font-bold text-emerald-500">{p.total_restocked_quantity}</td>
+                                <td className="py-2 px-2 text-right font-mono font-extrabold text-foreground">{peso(p.total_refund_amount)}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -2298,14 +2298,14 @@ export default function ReportsPage() {
               </div>
 
               {/* Returns List Table */}
-              <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6 shadow-sm space-y-4">
+              <div className="bg-card rounded-2xl border border-border p-5 sm:p-6 shadow-sm space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
                     <div className="flex items-center gap-2">
                       <RotateCcw size={18} className="text-orange-500" />
-                      <h3 className="text-base font-extrabold text-[#111827]">Return Requests Log</h3>
+                      <h3 className="text-base font-extrabold text-foreground">Return Requests Log</h3>
                     </div>
-                    <p className="text-xs text-gray-400 mt-0.5">
+                    <p className="text-xs text-muted-foreground mt-0.5">
                       All product return requests for the selected period ({filteredReturns.length} records)
                     </p>
                   </div>
@@ -2313,12 +2313,12 @@ export default function ReportsPage() {
                   <div className="flex items-center gap-2 flex-wrap">
                     {/* Search */}
                     <div className="relative">
-                      <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                       <input
                         value={returnSearch}
                         onChange={e => setReturnSearch(e.target.value)}
                         placeholder="Search returns..."
-                        className="w-48 pl-8 pr-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-orange-500/30"
+                        className="w-48 pl-8 pr-3 py-1.5 bg-muted/60 border border-border rounded-xl text-xs font-semibold text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-orange-500/30"
                       />
                     </div>
                     {/* Status Filter */}
@@ -2330,7 +2330,7 @@ export default function ReportsPage() {
                           className={`px-2.5 py-1 text-[10px] font-bold rounded-lg transition-colors border ${
                             returnStatusFilter === s
                               ? "bg-orange-500 text-white border-orange-500"
-                              : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"
+                              : "bg-muted text-muted-foreground border-border hover:bg-muted/80 hover:text-foreground"
                           }`}
                         >
                           {s}
@@ -2343,7 +2343,7 @@ export default function ReportsPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs">
                     <thead>
-                      <tr className="border-b border-gray-200 bg-gray-50 text-gray-500 font-extrabold uppercase tracking-wider text-left">
+                      <tr className="border-b border-border bg-muted/40 text-muted-foreground font-extrabold uppercase tracking-wider text-left">
                         <th className="py-3 px-3">Return No.</th>
                         <th className="py-3 px-3">Date</th>
                         <th className="py-3 px-3">Receipt</th>
@@ -2355,36 +2355,36 @@ export default function ReportsPage() {
                         <th className="py-3 px-3 text-right">Action</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
+                    <tbody className="divide-y divide-border/60">
                       {filteredReturns.length === 0 ? (
                         <tr>
-                          <td colSpan={9} className="py-8 text-center text-gray-400">
+                          <td colSpan={9} className="py-8 text-center text-muted-foreground">
                             No return requests found for the selected filter.
                           </td>
                         </tr>
                       ) : (
                         filteredReturns.map(r => (
-                          <tr key={r.id} className="hover:bg-gray-50 transition-colors">
-                            <td className="py-3 px-3 font-mono font-extrabold text-orange-600">
+                          <tr key={r.id} className="hover:bg-muted/30 transition-colors">
+                            <td className="py-3 px-3 font-mono font-extrabold text-orange-500">
                               {r.return_no}
                             </td>
-                            <td className="py-3 px-3 text-gray-500 font-mono text-[11px]">
+                            <td className="py-3 px-3 text-muted-foreground font-mono text-[11px]">
                               {r.date}
                             </td>
-                            <td className="py-3 px-3 font-mono font-bold text-blue-600 text-[11px]">
+                            <td className="py-3 px-3 font-mono font-bold text-blue-500 text-[11px]">
                               {r.receipt_no}
                             </td>
                             <td className="py-3 px-3">
-                              <p className="font-semibold text-gray-900">{r.customer_name}</p>
-                              <p className="text-[10px] text-gray-400">{r.customer_code}</p>
+                              <p className="font-semibold text-foreground">{r.customer_name}</p>
+                              <p className="text-[10px] text-muted-foreground">{r.customer_code}</p>
                             </td>
-                            <td className="py-3 px-3 text-gray-600 max-w-[140px] truncate" title={r.reason}>
+                            <td className="py-3 px-3 text-muted-foreground max-w-[140px] truncate" title={r.reason}>
                               {r.reason}
                             </td>
-                            <td className="py-3 px-3 text-center font-mono font-bold text-gray-700">
+                            <td className="py-3 px-3 text-center font-mono font-bold text-foreground">
                               {r.total_items_quantity}
                             </td>
-                            <td className="py-3 px-3 text-right font-mono font-extrabold text-emerald-600">
+                            <td className="py-3 px-3 text-right font-mono font-extrabold text-emerald-500">
                               {peso(r.refund_amount)}
                             </td>
                             <td className="py-3 px-3 text-center">
@@ -2395,7 +2395,7 @@ export default function ReportsPage() {
                             <td className="py-3 px-3 text-right">
                               <button
                                 onClick={() => setSelectedReturnDetail(r)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-orange-700 bg-orange-50 hover:bg-orange-100 rounded-lg transition-colors"
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-orange-500 bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/20 rounded-lg transition-colors"
                               >
                                 <Eye size={12} /> View
                               </button>
@@ -2411,14 +2411,14 @@ export default function ReportsPage() {
           )}
 
           {/* ─── 12. RECEIPT / TRANSACTION HISTORY ──────────────────────────── */}
-          <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6 shadow-sm space-y-4">
+          <div className="bg-card rounded-2xl border border-border p-5 sm:p-6 shadow-sm space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <div className="flex items-center gap-2">
-                  <Receipt size={20} className="text-emerald-600" />
-                  <h2 className="text-lg font-extrabold text-[#111827]">Transaction History</h2>
+                  <Receipt size={20} className="text-emerald-500" />
+                  <h2 className="text-lg font-extrabold text-foreground">Transaction History</h2>
                 </div>
-                <p className="text-xs text-gray-400 mt-0.5">
+                <p className="text-xs text-muted-foreground mt-0.5">
                   Actual completed in-store POS receipts for the period
                 </p>
               </div>
@@ -2426,17 +2426,17 @@ export default function ReportsPage() {
               {/* Filters & Search */}
               <div className="flex items-center gap-3 flex-wrap">
                 <div className="relative w-full sm:w-64">
-                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                   <input
                     type="text"
                     value={txSearch}
                     onChange={e => setTxSearch(e.target.value)}
                     placeholder="Search receipt, customer, staff..."
-                    className="w-full pl-8 pr-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                    className="w-full pl-8 pr-3 py-1.5 bg-muted/60 border border-border rounded-xl text-xs font-semibold text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
                   />
                 </div>
 
-                <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold shrink-0">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 rounded-xl text-xs font-bold shrink-0">
                   <span className="w-2 h-2 rounded-full bg-emerald-500" />
                   Cash Tendered (Walk-in)
                 </div>
@@ -2446,7 +2446,7 @@ export default function ReportsPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50 text-gray-500 font-extrabold uppercase tracking-wider text-left">
+                  <tr className="border-b border-border bg-muted/40 text-muted-foreground font-extrabold uppercase tracking-wider text-left">
                     <th className="py-3 px-4">Receipt No.</th>
                     <th className="py-3 px-4">Date & Time</th>
                     <th className="py-3 px-4">Customer</th>
@@ -2458,48 +2458,48 @@ export default function ReportsPage() {
                     <th className="py-3 px-4 text-right">Action</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-border/60">
                   {displayedTransactions.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="py-8 text-center text-gray-400">
+                      <td colSpan={9} className="py-8 text-center text-muted-foreground">
                         No transactions found for the selected filter.
                       </td>
                     </tr>
                   ) : (
                     displayedTransactions.map(t => (
-                      <tr key={t.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="py-3 px-4 font-mono font-extrabold text-blue-600">
+                      <tr key={t.id} className="hover:bg-muted/30 transition-colors">
+                        <td className="py-3 px-4 font-mono font-extrabold text-blue-500">
                           {t.receipt_no}
                         </td>
-                        <td className="py-3 px-4 text-gray-500 font-mono">
+                        <td className="py-3 px-4 text-muted-foreground font-mono">
                           {t.date}
                         </td>
-                        <td className="py-3 px-4 font-semibold text-gray-900">
+                        <td className="py-3 px-4 font-semibold text-foreground">
                           {t.customer}
                         </td>
-                        <td className="py-3 px-4 text-gray-600">
+                        <td className="py-3 px-4 text-muted-foreground">
                           {t.cashier}
                         </td>
-                        <td className="py-3 px-4 text-center font-mono font-bold text-gray-700">
+                        <td className="py-3 px-4 text-center font-mono font-bold text-foreground">
                           {t.items_count}
                         </td>
-                        <td className="py-3 px-4 text-right font-mono font-extrabold text-emerald-600">
+                        <td className="py-3 px-4 text-right font-mono font-extrabold text-emerald-500">
                           {peso(t.total_amount)}
                         </td>
                         <td className="py-3 px-4 text-center">
-                          <span className="px-2.5 py-0.5 rounded-full font-bold text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <span className="px-2.5 py-0.5 rounded-full font-bold text-[10px] bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
                             Cash
                           </span>
                         </td>
                         <td className="py-3 px-4 text-center">
-                          <span className="px-2 py-0.5 rounded-full font-bold text-[10px] bg-emerald-100 text-emerald-800">
+                          <span className="px-2 py-0.5 rounded-full font-bold text-[10px] bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
                             {t.status}
                           </span>
                         </td>
                         <td className="py-3 px-4 text-right">
                           <button
                             onClick={() => handleOpenReceipt(t)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-emerald-500 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-lg transition-colors"
                           >
                             <Eye size={12} /> View Receipt
                           </button>
@@ -2517,21 +2517,21 @@ export default function ReportsPage() {
       {/* ─── RETURN DETAIL MODAL ──────────────────────────────────────────── */}
       {selectedReturnDetail && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl border border-gray-200 p-6 sm:p-7 w-full max-w-lg shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
+          <div className="bg-card rounded-3xl border border-border p-6 sm:p-7 w-full max-w-lg shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
             {/* Header */}
-            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+            <div className="flex items-center justify-between border-b border-border pb-3">
               <div className="flex items-center gap-2">
-                <div className="w-9 h-9 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center">
+                <div className="w-9 h-9 rounded-xl bg-orange-500/10 text-orange-500 flex items-center justify-center">
                   <RotateCcw size={18} />
                 </div>
                 <div>
-                  <h3 className="font-extrabold text-gray-900 text-sm">Return Request Detail</h3>
-                  <p className="text-[10px] text-gray-400">{selectedReturnDetail.return_no}</p>
+                  <h3 className="font-extrabold text-foreground text-sm">Return Request Detail</h3>
+                  <p className="text-[10px] text-muted-foreground">{selectedReturnDetail.return_no}</p>
                 </div>
               </div>
               <button
                 onClick={() => setSelectedReturnDetail(null)}
-                className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-colors"
+                className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-xl transition-colors"
               >
                 <X size={18} />
               </button>
@@ -2546,33 +2546,33 @@ export default function ReportsPage() {
 
             {/* Info Grid */}
             <div className="grid grid-cols-2 gap-3 text-xs">
-              <div className="p-3 bg-gray-50 rounded-xl">
-                <p className="text-[10px] font-bold text-gray-400 uppercase">Receipt No.</p>
-                <p className="font-extrabold text-blue-600 font-mono mt-0.5">{selectedReturnDetail.receipt_no}</p>
+              <div className="p-3 bg-muted/40 rounded-xl border border-border">
+                <p className="text-[10px] font-bold text-muted-foreground uppercase">Receipt No.</p>
+                <p className="font-extrabold text-blue-500 font-mono mt-0.5">{selectedReturnDetail.receipt_no}</p>
               </div>
-              <div className="p-3 bg-gray-50 rounded-xl">
-                <p className="text-[10px] font-bold text-gray-400 uppercase">Date Requested</p>
-                <p className="font-extrabold text-gray-800 mt-0.5">{selectedReturnDetail.date}</p>
+              <div className="p-3 bg-muted/40 rounded-xl border border-border">
+                <p className="text-[10px] font-bold text-muted-foreground uppercase">Date Requested</p>
+                <p className="font-extrabold text-foreground mt-0.5">{selectedReturnDetail.date}</p>
               </div>
-              <div className="p-3 bg-gray-50 rounded-xl">
-                <p className="text-[10px] font-bold text-gray-400 uppercase">Customer</p>
-                <p className="font-extrabold text-gray-800 mt-0.5">{selectedReturnDetail.customer_name}</p>
-                <p className="text-[10px] text-gray-400">{selectedReturnDetail.customer_code}</p>
+              <div className="p-3 bg-muted/40 rounded-xl border border-border">
+                <p className="text-[10px] font-bold text-muted-foreground uppercase">Customer</p>
+                <p className="font-extrabold text-foreground mt-0.5">{selectedReturnDetail.customer_name}</p>
+                <p className="text-[10px] text-muted-foreground">{selectedReturnDetail.customer_code}</p>
               </div>
-              <div className="p-3 bg-gray-50 rounded-xl">
-                <p className="text-[10px] font-bold text-gray-400 uppercase">Reason</p>
-                <p className="font-extrabold text-gray-800 mt-0.5">{selectedReturnDetail.reason}</p>
+              <div className="p-3 bg-muted/40 rounded-xl border border-border">
+                <p className="text-[10px] font-bold text-muted-foreground uppercase">Reason</p>
+                <p className="font-extrabold text-foreground mt-0.5">{selectedReturnDetail.reason}</p>
               </div>
             </div>
 
             {/* Returned Items Summary */}
-            <div className="bg-orange-50/50 rounded-xl border border-orange-100 p-4 space-y-2">
-              <p className="text-[10px] font-bold text-orange-500 uppercase tracking-wider">Returned Items</p>
-              <p className="text-xs text-gray-700 font-semibold leading-relaxed">
+            <div className="bg-orange-500/10 rounded-xl border border-orange-500/20 p-4 space-y-2">
+              <p className="text-[10px] font-bold text-orange-400 uppercase tracking-wider">Returned Items</p>
+              <p className="text-xs text-foreground font-semibold leading-relaxed">
                 {selectedReturnDetail.returned_items_summary}
               </p>
-              <div className="flex items-center gap-4 pt-1 border-t border-orange-100 mt-2">
-                <span className="text-[10px] text-gray-400">
+              <div className="flex items-center gap-4 pt-1 border-t border-orange-500/20 mt-2">
+                <span className="text-[10px] text-muted-foreground">
                   {selectedReturnDetail.items_count} product{selectedReturnDetail.items_count !== 1 ? 's' : ''} · {selectedReturnDetail.total_items_quantity} total qty
                 </span>
               </div>
@@ -2580,33 +2580,33 @@ export default function ReportsPage() {
 
             {/* Customer Notes */}
             {selectedReturnDetail.customer_notes && (
-              <div className="bg-gray-50 rounded-xl border border-gray-100 p-3 space-y-1">
-                <p className="text-[10px] font-bold text-gray-400 uppercase">Customer Notes</p>
-                <p className="text-xs text-gray-700">{selectedReturnDetail.customer_notes}</p>
+              <div className="bg-muted/40 rounded-xl border border-border p-3 space-y-1">
+                <p className="text-[10px] font-bold text-muted-foreground uppercase">Customer Notes</p>
+                <p className="text-xs text-foreground">{selectedReturnDetail.customer_notes}</p>
               </div>
             )}
 
             {/* Admin Notes */}
             {selectedReturnDetail.admin_notes && (
-              <div className="bg-blue-50/50 rounded-xl border border-blue-100 p-3 space-y-1">
+              <div className="bg-blue-500/10 rounded-xl border border-blue-500/20 p-3 space-y-1">
                 <p className="text-[10px] font-bold text-blue-400 uppercase">Store Response / Admin Notes</p>
-                <p className="text-xs text-blue-800 font-semibold">{selectedReturnDetail.admin_notes}</p>
+                <p className="text-xs text-blue-400 font-semibold">{selectedReturnDetail.admin_notes}</p>
               </div>
             )}
 
             {/* Refund Total */}
-            <div className="border-t border-dashed border-gray-300 pt-3">
+            <div className="border-t border-dashed border-border pt-3">
               <div className="flex justify-between items-center text-sm">
-                <span className="font-bold text-gray-600">Total Refund Amount</span>
-                <span className="font-extrabold text-xl text-emerald-600 font-mono">{peso(selectedReturnDetail.refund_amount)}</span>
+                <span className="font-bold text-muted-foreground">Total Refund Amount</span>
+                <span className="font-extrabold text-xl text-emerald-500 font-mono">{peso(selectedReturnDetail.refund_amount)}</span>
               </div>
             </div>
 
             {/* Close */}
-            <div className="pt-2 border-t border-gray-100">
+            <div className="pt-2 border-t border-border">
               <button
                 onClick={() => setSelectedReturnDetail(null)}
-                className="w-full py-2.5 bg-gray-100 text-gray-700 font-bold text-xs rounded-xl hover:bg-gray-200 transition-colors"
+                className="w-full py-2.5 bg-muted text-foreground font-bold text-xs rounded-xl hover:bg-muted/80 transition-colors"
               >
                 Close
               </button>
@@ -2618,22 +2618,22 @@ export default function ReportsPage() {
       {/* ─── 13. RECEIPT DETAILS MODAL ─────────────────────────────────────── */}
       {selectedReceipt && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl border border-gray-200 p-6 sm:p-7 w-full max-w-md shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-card rounded-3xl border border-border p-6 sm:p-7 w-full max-w-md shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
             
             {/* Header */}
-            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+            <div className="flex items-center justify-between border-b border-border pb-3">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0">
                   <img src={logoImg} alt="SmartMart" className="w-full h-full object-cover" />
                 </div>
                 <div>
-                  <h3 className="font-extrabold text-gray-900 text-sm">SmartMart POS Receipt</h3>
-                  <p className="text-[10px] text-gray-400">Official Store Transaction</p>
+                  <h3 className="font-extrabold text-foreground text-sm">SmartMart POS Receipt</h3>
+                  <p className="text-[10px] text-muted-foreground">Official Store Transaction</p>
                 </div>
               </div>
               <button
                 onClick={() => { setSelectedReceipt(null); setReceiptItems([]); }}
-                className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-colors"
+                className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-xl transition-colors"
               >
                 <X size={18} />
               </button>
@@ -2641,38 +2641,38 @@ export default function ReportsPage() {
 
             {/* Receipt Content */}
             <div className="space-y-4 text-xs font-mono">
-              <div className="text-center pb-2 border-b border-dashed border-gray-200">
-                <p className="font-extrabold text-base text-gray-900">{selectedReceipt.receipt_no}</p>
-                <p className="text-gray-400 text-[11px] mt-0.5">{selectedReceipt.date}</p>
+              <div className="text-center pb-2 border-b border-dashed border-border">
+                <p className="font-extrabold text-base text-foreground">{selectedReceipt.receipt_no}</p>
+                <p className="text-muted-foreground text-[11px] mt-0.5">{selectedReceipt.date}</p>
               </div>
 
               <div className="grid grid-cols-2 gap-2 text-[11px]">
-                <div className="p-2.5 bg-gray-50 rounded-xl">
-                  <span className="text-gray-400 block text-[10px] uppercase font-bold">Customer</span>
-                  <span className="font-extrabold text-gray-800">{selectedReceipt.customer}</span>
+                <div className="p-2.5 bg-muted/40 rounded-xl border border-border">
+                  <span className="text-muted-foreground block text-[10px] uppercase font-bold">Customer</span>
+                  <span className="font-extrabold text-foreground">{selectedReceipt.customer}</span>
                 </div>
-                <div className="p-2.5 bg-gray-50 rounded-xl">
-                  <span className="text-gray-400 block text-[10px] uppercase font-bold">Cashier / Staff</span>
-                  <span className="font-extrabold text-gray-800">{selectedReceipt.cashier}</span>
+                <div className="p-2.5 bg-muted/40 rounded-xl border border-border">
+                  <span className="text-muted-foreground block text-[10px] uppercase font-bold">Cashier / Staff</span>
+                  <span className="font-extrabold text-foreground">{selectedReceipt.cashier}</span>
                 </div>
               </div>
 
               {/* Items List */}
               <div>
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Purchased Items</p>
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2">Purchased Items</p>
                 {loadingReceiptItems ? (
-                  <p className="text-gray-400 text-center py-3">Loading receipt items...</p>
+                  <p className="text-muted-foreground text-center py-3">Loading receipt items...</p>
                 ) : receiptItems.length === 0 ? (
-                  <p className="text-gray-400 text-center py-3">No line items found.</p>
+                  <p className="text-muted-foreground text-center py-3">No line items found.</p>
                 ) : (
                   <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
                     {receiptItems.map((item, idx) => (
-                      <div key={idx} className="flex justify-between items-center py-1 border-b border-gray-50 text-[11px]">
+                      <div key={idx} className="flex justify-between items-center py-1 border-b border-border/50 text-[11px]">
                         <div>
-                          <p className="font-bold text-gray-800 font-sans">{item.product_name}</p>
-                          <p className="text-gray-400">{item.quantity} × {peso(item.unit_price)}</p>
+                          <p className="font-bold text-foreground font-sans">{item.product_name}</p>
+                          <p className="text-muted-foreground">{item.quantity} × {peso(item.unit_price)}</p>
                         </div>
-                        <span className="font-extrabold text-gray-900">{peso(item.subtotal)}</span>
+                        <span className="font-extrabold text-foreground">{peso(item.subtotal)}</span>
                       </div>
                     ))}
                   </div>
@@ -2680,39 +2680,39 @@ export default function ReportsPage() {
               </div>
 
               {/* Totals */}
-              <div className="border-t border-dashed border-gray-300 pt-3 space-y-1.5 text-xs">
-                <div className="flex justify-between text-gray-500">
+              <div className="border-t border-dashed border-border pt-3 space-y-1.5 text-xs">
+                <div className="flex justify-between text-muted-foreground">
                   <span>Subtotal</span>
                   <span>{peso(selectedReceipt.total_amount)}</span>
                 </div>
-                <div className="flex justify-between text-gray-500">
+                <div className="flex justify-between text-muted-foreground">
                   <span>Discount</span>
                   <span>₱0.00</span>
                 </div>
-                <div className="flex justify-between font-extrabold text-sm text-gray-900 pt-1 border-t border-gray-100">
+                <div className="flex justify-between font-extrabold text-sm text-foreground pt-1 border-t border-border">
                   <span>Total</span>
-                  <span className="text-emerald-600">{peso(selectedReceipt.total_amount)}</span>
+                  <span className="text-emerald-500">{peso(selectedReceipt.total_amount)}</span>
                 </div>
-                <div className="flex justify-between text-gray-500">
+                <div className="flex justify-between text-muted-foreground">
                   <span>Cash Tendered</span>
                   <span>{peso(selectedReceipt.cash_tendered)}</span>
                 </div>
-                <div className="flex justify-between font-extrabold text-gray-700">
+                <div className="flex justify-between font-extrabold text-foreground">
                   <span>Change</span>
                   <span>{peso(selectedReceipt.change_amount)}</span>
                 </div>
-                <div className="flex justify-between text-[11px] text-gray-400 pt-1">
+                <div className="flex justify-between text-[11px] text-muted-foreground pt-1">
                   <span>Payment Method:</span>
-                  <span className="font-bold text-gray-700">{selectedReceipt.payment_method}</span>
+                  <span className="font-bold text-foreground">{selectedReceipt.payment_method}</span>
                 </div>
               </div>
             </div>
 
             {/* Modal Actions */}
-            <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
+            <div className="flex items-center gap-2 pt-2 border-t border-border">
               <button
                 onClick={handleDownloadReceipt}
-                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-gray-100 text-gray-700 font-bold text-xs rounded-xl hover:bg-gray-200 transition-colors"
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-muted text-foreground font-bold text-xs rounded-xl hover:bg-muted/80 transition-colors"
               >
                 <Download size={14} /> Download Receipt
               </button>

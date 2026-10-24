@@ -163,8 +163,8 @@ export default function RequestReturnModal({
   const displayCustomerName = customerName || data?.transaction?.customer_name;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-sm animate-in fade-in">
-      <div className="relative w-full max-w-2xl bg-white rounded-3xl border border-gray-200 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/70 backdrop-blur-sm animate-in fade-in">
+      <div className="relative w-full max-w-2xl bg-card rounded-3xl border border-border shadow-2xl overflow-hidden flex flex-col max-h-[90vh] text-foreground">
         {/* Header */}
         <div className="px-6 py-5 bg-gradient-to-r from-emerald-600 to-teal-700 text-white flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
@@ -180,7 +180,7 @@ export default function RequestReturnModal({
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
+            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors cursor-pointer"
           >
             <X size={18} />
           </button>
@@ -191,13 +191,13 @@ export default function RequestReturnModal({
           {/* Transaction Picker (if opened without a specific transaction) */}
           {!initialTxId && customerTransactions.length > 0 && (
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-gray-600 mb-2">
+              <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">
                 Select Purchase Transaction / Receipt
               </label>
               <select
                 value={selectedTxId || ""}
                 onChange={e => setSelectedTxId(Number(e.target.value))}
-                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                className="w-full px-4 py-2.5 rounded-xl border border-border bg-muted/60 text-sm font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
               >
                 {customerTransactions.map(t => (
                   <option key={t.id} value={t.id}>
@@ -210,31 +210,31 @@ export default function RequestReturnModal({
 
           {/* Receipt Info Bar */}
           {data?.transaction && (
-            <div className="p-3.5 rounded-2xl bg-gray-50 border border-gray-100 flex items-center justify-between text-xs gap-3 flex-wrap">
+            <div className="p-3.5 rounded-2xl bg-muted/40 border border-border flex items-center justify-between text-xs gap-3 flex-wrap">
               <div>
-                <span className="text-gray-400 block">Receipt Number</span>
-                <span className="font-extrabold text-gray-800 font-mono text-sm">{data.transaction.receipt_no}</span>
+                <span className="text-muted-foreground block">Receipt Number</span>
+                <span className="font-extrabold text-foreground font-mono text-sm">{data.transaction.receipt_no}</span>
               </div>
               {displayCustomerName && (
                 <div>
-                  <span className="text-gray-400 block">Customer</span>
-                  <span className="font-semibold text-gray-800">{displayCustomerName}</span>
+                  <span className="text-muted-foreground block">Customer</span>
+                  <span className="font-semibold text-foreground">{displayCustomerName}</span>
                 </div>
               )}
               <div>
-                <span className="text-gray-400 block">Cashier</span>
-                <span className="font-semibold text-gray-800 flex items-center gap-1">
-                  <User size={12} className="text-gray-400" />
+                <span className="text-muted-foreground block">Cashier</span>
+                <span className="font-semibold text-foreground flex items-center gap-1">
+                  <User size={12} className="text-muted-foreground" />
                   {data.transaction.cashier_name || customerTransactions.find(t => t.id === selectedTxId)?.cashier || "Cashier"}
                 </span>
               </div>
               <div>
-                <span className="text-gray-400 block">Purchase Date</span>
-                <span className="font-semibold text-gray-700">{data.transaction.date}</span>
+                <span className="text-muted-foreground block">Purchase Date</span>
+                <span className="font-semibold text-foreground">{data.transaction.date}</span>
               </div>
               <div className="text-right">
-                <span className="text-gray-400 block">Total Paid</span>
-                <span className="font-extrabold text-gray-900 font-mono text-sm">{peso(Number(data.transaction.total_amount))}</span>
+                <span className="text-muted-foreground block">Total Paid</span>
+                <span className="font-extrabold text-foreground font-mono text-sm">{peso(Number(data.transaction.total_amount))}</span>
               </div>
             </div>
           )}
@@ -255,11 +255,11 @@ export default function RequestReturnModal({
               {/* Items Section */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold uppercase tracking-wider text-gray-600">
+                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                     {isAllAlreadyReturned ? "Transaction Items Status" : "Select Items to Return"}
                   </label>
                   {!isAllAlreadyReturned && (
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-muted-foreground">
                       {selectedItemsList.length} of {returnableItems.length} returnable selected
                     </span>
                   )}
@@ -268,30 +268,30 @@ export default function RequestReturnModal({
                 {/* Case 1: All items are already returned */}
                 {isAllAlreadyReturned ? (
                   <div className="space-y-3">
-                    <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 flex items-start gap-3">
-                      <AlertTriangle size={20} className="text-amber-600 shrink-0 mt-0.5" />
+                    <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 flex items-start gap-3">
+                      <AlertTriangle size={20} className="text-amber-500 shrink-0 mt-0.5" />
                       <div>
-                        <p className="text-sm font-extrabold uppercase tracking-wide text-amber-900 flex items-center gap-1.5">
+                        <p className="text-sm font-extrabold uppercase tracking-wide flex items-center gap-1.5">
                           Already Returned
                         </p>
-                        <p className="text-xs text-amber-700 mt-1 leading-relaxed">
+                        <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
                           All items on this receipt have already been returned. The return button is no longer needed as there are no returnable items remaining.
                         </p>
                       </div>
                     </div>
 
                     {/* Non-selectable list of already returned items */}
-                    <div className="border border-gray-200 rounded-2xl overflow-hidden divide-y divide-gray-100 bg-gray-50/50">
+                    <div className="border border-border rounded-2xl overflow-hidden divide-y divide-border bg-muted/40">
                       {alreadyReturnedItems.map(item => (
                         <div key={item.transaction_item_id} className="p-3.5 flex items-center justify-between gap-3 text-xs">
                           <div>
-                            <p className="font-bold text-gray-700">{item.product_name}</p>
-                            <p className="text-gray-400 mt-0.5">
+                            <p className="font-bold text-foreground">{item.product_name}</p>
+                            <p className="text-muted-foreground mt-0.5">
                               Purchased: {item.purchased_quantity} · {peso(Number(item.unit_price))} each
                             </p>
                           </div>
-                          <span className="px-2.5 py-1 rounded-full bg-gray-200/80 text-gray-600 font-bold text-[11px] border border-gray-300 flex items-center gap-1 shrink-0">
-                            <CheckCircle2 size={12} className="text-gray-500" /> Already Returned
+                          <span className="px-2.5 py-1 rounded-full bg-muted text-muted-foreground font-bold text-[11px] border border-border flex items-center gap-1 shrink-0">
+                            <CheckCircle2 size={12} className="text-muted-foreground" /> Already Returned
                           </span>
                         </div>
                       ))}
@@ -302,15 +302,15 @@ export default function RequestReturnModal({
                   <>
                     {/* Notice for any already returned items that are excluded */}
                     {alreadyReturnedItems.length > 0 && (
-                      <div className="p-3 rounded-2xl bg-gray-50 border border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-                        <div className="flex items-center gap-2 text-gray-600">
-                          <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
+                      <div className="p-3 rounded-2xl bg-muted/40 border border-border flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                        <div className="flex items-center gap-2 text-foreground">
+                          <CheckCircle2 size={14} className="text-emerald-500 shrink-0" />
                           <span>
-                            <strong className="text-gray-800">Already Returned:</strong>{" "}
+                            <strong className="text-foreground">Already Returned:</strong>{" "}
                             {alreadyReturnedItems.map(i => `${i.product_name} (×${i.already_returned || i.purchased_quantity})`).join(", ")}
                           </span>
                         </div>
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 bg-gray-200/80 px-2 py-0.5 rounded-md shrink-0 self-start sm:self-auto">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground bg-muted px-2 py-0.5 rounded-md shrink-0 self-start sm:self-auto border border-border">
                           Already Returned · Excluded
                         </span>
                       </div>
@@ -318,19 +318,19 @@ export default function RequestReturnModal({
 
                     {returnableItems.length > 3 && (
                       <div className="relative mb-2.5">
-                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                         <input
                           type="text"
                           value={itemFilter}
                           onChange={e => setItemFilter(e.target.value)}
                           placeholder="Filter eligible items on this receipt..."
-                          className="w-full pl-8 pr-7 py-2 text-xs rounded-xl bg-gray-50 border border-gray-200 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+                          className="w-full pl-8 pr-7 py-2 text-xs rounded-xl bg-muted/60 border border-border text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
                         />
                         {itemFilter && (
                           <button
                             type="button"
                             onClick={() => setItemFilter("")}
-                            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5 rounded-full hover:bg-gray-200 transition-colors"
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-0.5 rounded-full hover:bg-muted transition-colors"
                           >
                             <X size={12} />
                           </button>
@@ -350,8 +350,8 @@ export default function RequestReturnModal({
                               key={item.transaction_item_id}
                               className={`p-3.5 rounded-2xl border transition-all ${
                                 isSelected
-                                  ? "bg-emerald-50/50 border-emerald-300 shadow-sm"
-                                  : "bg-white border-gray-200 hover:border-gray-300"
+                                  ? "bg-emerald-500/10 border-emerald-500/40 shadow-sm"
+                                  : "bg-card border-border hover:border-border/80"
                               }`}
                             >
                               <div className="flex items-center justify-between gap-3">
@@ -360,22 +360,22 @@ export default function RequestReturnModal({
                                     type="checkbox"
                                     checked={isSelected}
                                     onChange={() => toggleItemSelection(item)}
-                                    className="w-4 h-4 rounded text-emerald-600 border-gray-300 focus:ring-emerald-500 cursor-pointer"
+                                    className="w-4 h-4 rounded text-emerald-600 border-border focus:ring-emerald-500 cursor-pointer"
                                   />
                                   <div className="min-w-0">
-                                    <p className="text-sm font-extrabold text-gray-900 truncate">
+                                    <p className="text-sm font-extrabold text-foreground truncate">
                                       {item.product_name}
                                     </p>
-                                    <p className="text-xs text-gray-500">
+                                    <p className="text-xs text-muted-foreground">
                                       {peso(Number(item.unit_price))} each
                                       {item.current_stock !== undefined && (
-                                        <span className="text-gray-400 font-mono ml-1.5">
+                                        <span className="text-muted-foreground font-mono ml-1.5">
                                           (Current store stock: {item.current_stock})
                                         </span>
                                       )}
-                                      {" "}· Eligible to return: <span className="font-bold text-gray-700">{item.available_quantity}</span> of {item.purchased_quantity}
+                                      {" "}· Eligible to return: <span className="font-bold text-foreground">{item.available_quantity}</span> of {item.purchased_quantity}
                                       {item.already_returned > 0 && (
-                                        <span className="text-amber-600 ml-1.5 font-medium">
+                                        <span className="text-amber-500 ml-1.5 font-medium">
                                           ({item.already_returned} already returned)
                                         </span>
                                       )}
@@ -386,29 +386,29 @@ export default function RequestReturnModal({
                                 {/* Quantity Controls (if selected) */}
                                 {isSelected && (
                                   <div className="flex items-center gap-2 shrink-0">
-                                    <span className="text-xs text-gray-400 font-semibold">Qty:</span>
-                                    <div className="flex items-center border border-gray-200 rounded-xl bg-white overflow-hidden shadow-xs">
+                                    <span className="text-xs text-muted-foreground font-semibold">Qty:</span>
+                                    <div className="flex items-center border border-border rounded-xl bg-card overflow-hidden shadow-xs">
                                       <button
                                         type="button"
                                         onClick={() => setItemQuantity(item, returnQty - 1)}
                                         disabled={returnQty <= 1}
-                                        className="px-2.5 py-1 text-gray-600 hover:bg-gray-100 disabled:opacity-30 text-xs font-bold"
+                                        className="px-2.5 py-1 text-foreground hover:bg-muted disabled:opacity-30 text-xs font-bold cursor-pointer"
                                       >
                                         -
                                       </button>
-                                      <span className="px-2 text-xs font-extrabold text-gray-900 font-mono min-w-[24px] text-center">
+                                      <span className="px-2 text-xs font-extrabold text-foreground font-mono min-w-[24px] text-center">
                                         {returnQty}
                                       </span>
                                       <button
                                         type="button"
                                         onClick={() => setItemQuantity(item, returnQty + 1)}
                                         disabled={returnQty >= item.available_quantity}
-                                        className="px-2.5 py-1 text-gray-600 hover:bg-gray-100 disabled:opacity-30 text-xs font-bold"
+                                        className="px-2.5 py-1 text-foreground hover:bg-muted disabled:opacity-30 text-xs font-bold cursor-pointer"
                                       >
                                         +
                                       </button>
                                     </div>
-                                    <span className="text-xs font-extrabold text-emerald-700 font-mono min-w-[70px] text-right">
+                                    <span className="text-xs font-extrabold text-emerald-500 font-mono min-w-[70px] text-right">
                                       {peso(Number(item.unit_price) * returnQty)}
                                     </span>
                                   </div>
@@ -426,13 +426,13 @@ export default function RequestReturnModal({
               {!isAllAlreadyReturned && (
                 <>
                   <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-gray-600 mb-2">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">
                       Primary Reason for Return *
                     </label>
                     <select
                       value={reason}
                       onChange={e => setReason(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-muted/60 text-sm font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                     >
                       {RETURN_REASONS.map(r => (
                         <option key={r} value={r}>{r}</option>
@@ -441,24 +441,24 @@ export default function RequestReturnModal({
                   </div>
 
                   {/* Restock Option */}
-                  <div className="p-3.5 rounded-2xl border border-gray-200 bg-white">
+                  <div className="p-3.5 rounded-2xl border border-border bg-card">
                     <label className="flex items-start gap-3 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={restock}
                         onChange={e => setRestock(e.target.checked)}
-                        className="w-4 h-4 mt-0.5 rounded text-emerald-600 border-gray-300 focus:ring-emerald-500 cursor-pointer"
+                        className="w-4 h-4 mt-0.5 rounded text-emerald-600 border-border focus:ring-emerald-500 cursor-pointer"
                       />
                       <div>
-                        <p className="text-xs font-bold text-gray-800">Restock item(s) back into store inventory</p>
-                        <p className="text-[11px] text-gray-500 mt-0.5">Automatically increment the products' stock counts upon approval</p>
+                        <p className="text-xs font-bold text-foreground">Restock item(s) back into store inventory</p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">Automatically increment the products' stock counts upon approval</p>
                       </div>
                     </label>
                   </div>
 
                   {/* Store Decision Notes / Feedback */}
                   <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-gray-600 mb-2">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">
                       Store Decision Notes / Feedback
                     </label>
                     <textarea
@@ -466,14 +466,14 @@ export default function RequestReturnModal({
                       value={decisionNotes}
                       onChange={e => setDecisionNotes(e.target.value)}
                       placeholder="e.g., Items inspected at counter; refund paid in cash."
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 resize-none"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-muted/60 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 resize-none placeholder-muted-foreground"
                     />
                   </div>
 
                   {/* Return Policy Notice */}
-                  <div className="p-3.5 rounded-2xl bg-amber-50/70 border border-amber-200/60 flex items-start gap-3">
-                    <ShieldAlert size={18} className="text-amber-600 shrink-0 mt-0.5" />
-                    <p className="text-xs text-amber-800 leading-relaxed">
+                  <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-start gap-3">
+                    <ShieldAlert size={18} className="text-amber-500 shrink-0 mt-0.5" />
+                    <p className="text-xs text-amber-600 dark:text-amber-400 leading-relaxed">
                       <strong>Walk-In Verification Notice:</strong> Verify the physical condition of the item and match against the receipt. Choose <strong>Approve &amp; Complete Refund</strong> to immediately finalize the refund and restock inventory, or <strong>Reject Return</strong> if ineligible.
                     </p>
                   </div>
@@ -484,26 +484,26 @@ export default function RequestReturnModal({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+        <div className="px-6 py-4 bg-muted/40 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
           <div className="text-left w-full sm:w-auto">
             {!isAllAlreadyReturned ? (
               <>
-                <span className="text-xs text-gray-400 block font-semibold">Total Estimated Refund</span>
+                <span className="text-xs text-muted-foreground block font-semibold">Total Estimated Refund</span>
                 <div className="flex items-baseline gap-2">
-                  <span className="text-xl font-extrabold text-emerald-600 font-mono">
+                  <span className="text-xl font-extrabold text-emerald-500 font-mono">
                     {peso(totalRefund)}
                   </span>
-                  <span className="text-xs text-gray-500">
+                  <span className="text-xs text-muted-foreground">
                     ({totalItemsCount} item{totalItemsCount === 1 ? "" : "s"})
                   </span>
                 </div>
               </>
             ) : (
               <div className="flex items-center gap-2">
-                <span className="px-2.5 py-1 rounded-lg bg-gray-200/80 text-gray-700 font-bold text-xs flex items-center gap-1.5 border border-gray-300">
-                  <CheckCircle2 size={14} className="text-emerald-600" /> Already Returned
+                <span className="px-2.5 py-1 rounded-lg bg-muted text-foreground font-bold text-xs flex items-center gap-1.5 border border-border">
+                  <CheckCircle2 size={14} className="text-emerald-500" /> Already Returned
                 </span>
-                <span className="text-xs text-gray-500">Return button is no longer needed</span>
+                <span className="text-xs text-muted-foreground">Return button is no longer needed</span>
               </div>
             )}
           </div>
@@ -512,18 +512,17 @@ export default function RequestReturnModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-100 transition-colors"
+              className="px-4 py-2.5 rounded-xl border border-border text-sm font-semibold text-foreground hover:bg-muted transition-colors cursor-pointer"
             >
               {isAllAlreadyReturned ? "Close" : "Cancel"}
             </button>
-            {/* The return buttons are no longer needed when all items are already returned */}
             {!isAllAlreadyReturned && (
               <>
                 <button
                   type="button"
                   onClick={() => handleSubmitAction("Rejected")}
                   disabled={submitting || selectedItemsList.length === 0}
-                  className="px-4 py-2.5 rounded-xl border border-red-200 text-red-600 hover:bg-red-50 text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 transition-colors"
+                  className="px-4 py-2.5 rounded-xl border border-red-500/30 text-red-500 hover:bg-red-500/10 text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 transition-colors cursor-pointer"
                 >
                   {submitting ? (
                     <RotateCcw size={15} className="animate-spin" />
@@ -536,7 +535,7 @@ export default function RequestReturnModal({
                   type="button"
                   onClick={() => handleSubmitAction("Completed")}
                   disabled={submitting || selectedItemsList.length === 0}
-                  className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold shadow-md shadow-emerald-600/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-all"
+                  className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold shadow-md shadow-emerald-600/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-all cursor-pointer"
                 >
                   {submitting ? (
                     <>

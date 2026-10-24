@@ -267,7 +267,7 @@ export default function CustomerAnalytics({ onNavigate }: CustomerAnalyticsProps
 
     return ALL_MONTHS.map(m => {
       const ym = selectedYear !== "all" ? `${yr}-${m.num}` : `month-${m.num}`;
-      const label = selectedYear !== "all" ? `${m.name} ${yr}` : m.name;
+      const label = m.name;
       return {
         ym,
         label,
@@ -681,7 +681,10 @@ export default function CustomerAnalytics({ onNavigate }: CustomerAnalyticsProps
         return selectedYear !== "all" ? `All Months of ${selectedYear}` : "All Recorded Months";
       }
       const found = allMonthsList.find(m => m.ym === selectedMonth);
-      if (found) return found.label;
+      if (found) {
+        const yr = found.year || (selectedYear !== "all" ? selectedYear : "");
+        return yr ? `${found.monthName} ${yr}` : found.monthName;
+      }
       return selectedMonth;
     } else {
       if (selectedYear === "all") return "All Time (All Years)";
