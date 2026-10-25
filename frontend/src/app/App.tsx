@@ -1402,6 +1402,76 @@ function StoreProvider({ children }: { children: React.ReactNode }) {
     refreshData();
   }, [refreshData]);
 
+  // Real-time auto sync for products & inventory stock (polls every 3 seconds when page is active)
+  useEffect(() => {
+    const pollStock = () => {
+      if (document.hidden) return;
+      api.products.getPublic()
+        .catch(() => api.products.getAll())
+        .then(prods => {
+          if (Array.isArray(prods)) {
+            setProducts(prevProds => {
+              const hasChange = prods.length !== prevProds.length || prods.some(p => {
+                const prev = prevProds.find(item => item.id === p.id);
+                return !prev || prev.stock !== p.stock || prev.price !== Number(p.price) || prev.name !== p.name;
+              });
+              if (!hasChange) return prevProds;
+              return prods.map(p => ({
+                id: p.id,
+                name: p.name,
+                category: p.category,
+                category_id: p.category_id,
+                price: Number(p.price),
+                stock: p.stock,
+                lowStock: p.stock <= (p.low_stock_threshold || 10),
+                image_url: p.image_url || null,
+              }));
+            });
+          }
+        })
+        .catch(() => {});
+    };
+
+    const interval = setInterval(pollStock, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Listen to real-time events and multi-tab broadcast messages
+  useEffect(() => {
+    const handleSync = () => {
+      refreshData();
+    };
+
+    window.addEventListener("smartmart:refresh-data", handleSync);
+    window.addEventListener("smartmart:stock-updated", handleSync);
+
+    let channel: BroadcastChannel | null = null;
+    if (typeof BroadcastChannel !== "undefined") {
+      try {
+        channel = new BroadcastChannel("smartmart_sync");
+        channel.onmessage = (e) => {
+          if (e.data?.type === "REFRESH_DATA" || e.data?.type === "STOCK_UPDATED") {
+            refreshData();
+          }
+        };
+      } catch {}
+    }
+
+    const onVisibilityChange = () => {
+      if (!document.hidden) {
+        refreshData();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      window.removeEventListener("smartmart:refresh-data", handleSync);
+      window.removeEventListener("smartmart:stock-updated", handleSync);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      if (channel) channel.close();
+    };
+  }, [refreshData]);
+
   const addProduct = useCallback(async (p: Omit<Product, "id" | "lowStock">) => {
     try {
       const cats = await api.categories.getAll();
@@ -7988,7 +8058,7 @@ function AdminLayout({ onLogout }: { onLogout: () => void }) {
       return next;
     });
   };
-  const { products, categories, catMeta, addProduct: handleAddProduct, addCategory: handleAddCategory, pendingCustomers } = useStore();
+  const { products, categories, catMeta, addProduct: handleAddProduct, addCategory: handleAddCategory, pendingCustomers, refreshData } = useStore();
   const [pendingReturns, setPendingReturns] = useState(0);
 
   const fetchPendingReturns = useCallback(() => {
@@ -8009,6 +8079,11 @@ function AdminLayout({ onLogout }: { onLogout: () => void }) {
     staff: "Staff", reports: "Reports", settings: "Settings",
   };
 
+  const handleReturnsUpdated = useCallback(() => {
+    fetchPendingReturns();
+    refreshData();
+  }, [fetchPendingReturns, refreshData]);
+
   const renderPage = () => {
     switch (page) {
       case "dashboard": return <AdminDashboard products={products} categories={categories} />;
@@ -8016,7 +8091,7 @@ function AdminLayout({ onLogout }: { onLogout: () => void }) {
       case "categories": return <AdminCategoriesPage products={products} categories={categories} catMeta={catMeta} onAddCategory={handleAddCategory} />;
       case "inventory": return <InventoryPage products={products} categories={categories} catMeta={catMeta} />;
       case "sales": return <AdminSalesPage />;
-      case "returns": return <ReturnsManagement role="admin" onReturnsUpdated={fetchPendingReturns} />;
+      case "returns": return <ReturnsManagement role="admin" onReturnsUpdated={handleReturnsUpdated} />;
       case "staff": return <AdminStaffPage />;
       case "customers": return <CustomersPage />;
       case "reports": return <ReportsPage />;
@@ -8068,7 +8143,7 @@ function StaffLayout({ onLogout }: { onLogout: () => void }) {
       return next;
     });
   };
-  const { products, categories } = useStore();
+  const { products, categories, refreshData } = useStore();
   const user = getSavedUser();
   const displayName = user?.name || "Staff";
   const [pendingReturns, setPendingReturns] = useState(0);
@@ -8085,12 +8160,17 @@ function StaffLayout({ onLogout }: { onLogout: () => void }) {
     return () => clearInterval(interval);
   }, [fetchPendingReturns]);
 
+  const handleReturnsUpdated = useCallback(() => {
+    fetchPendingReturns();
+    refreshData();
+  }, [fetchPendingReturns, refreshData]);
+
   const renderPage = () => {
     switch (page) {
       case "dashboard": return <StaffDashboard onNavigate={p => setPage(p)} products={products} />;
       case "pos": return <POSPage products={products} categories={categories} />;
       case "transactions": return <TransactionsPage />;
-      case "returns": return <ReturnsManagement role="staff" onReturnsUpdated={fetchPendingReturns} />;
+      case "returns": return <ReturnsManagement role="staff" onReturnsUpdated={handleReturnsUpdated} />;
       case "profile": return <StaffProfile />;
     }
   };

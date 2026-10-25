@@ -132,6 +132,11 @@ export interface TransactionItem {
   has_returned_items?: boolean;
   items_summary?: string;
   returnable_items_summary?: string;
+  elapsed_minutes?: number;
+  elapsed_hours?: number;
+  return_window_hours?: number;
+  is_return_window_expired?: boolean;
+  return_window_error?: string | null;
 }
 
 export interface CustomerPurchasedItem {
@@ -676,6 +681,7 @@ export interface ReturnableItem {
   already_returned: number;
   available_quantity: number;
   is_returnable: boolean;
+  return_ineligible_reason?: string | null;
   current_stock?: number;
 }
 
@@ -688,6 +694,12 @@ export interface ReturnableItemsResponse {
     cashier_name?: string;
     total_amount: number | string;
     date: string;
+    created_at?: string;
+    elapsed_minutes?: number;
+    elapsed_hours?: number;
+    return_window_hours?: number;
+    is_return_window_expired?: boolean;
+    return_window_error?: string | null;
   };
   items: ReturnableItem[];
 }
@@ -896,4 +908,22 @@ export interface ReturnsAnalyticsReport {
   reasons: ReturnReasonStat[];
   top_returned_products: TopReturnedProduct[];
   returns_list: ReportReturnItem[];
+}
+
+/**
+ * Dispatches a global event and broadcast channel message to notify all components
+ * and tabs in real-time that inventory stock, transactions, or return data changed.
+ */
+export function notifyStockOrDataChanged() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("smartmart:refresh-data"));
+    window.dispatchEvent(new CustomEvent("smartmart:stock-updated"));
+    if (typeof BroadcastChannel !== "undefined") {
+      try {
+        const channel = new BroadcastChannel("smartmart_sync");
+        channel.postMessage({ type: "STOCK_UPDATED", timestamp: Date.now() });
+        channel.close();
+      } catch {}
+    }
+  }
 }
