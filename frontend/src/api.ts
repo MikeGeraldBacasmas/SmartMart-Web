@@ -426,6 +426,11 @@ export const api = {
       request(`/customers/${id}/deny`, {
         method: "POST",
       }),
+    resetPassword: (id: number | string, newPassword: string): Promise<{ message: string; temp_password: string; customer_id: number; username: string }> =>
+      request(`/customers/${id}/reset-password`, {
+        method: "POST",
+        body: JSON.stringify({ newPassword }),
+      }),
   },
 
   // Staff
@@ -445,6 +450,11 @@ export const api = {
     toggleStatus: (id: number | string): Promise<{ status: "Active" | "Inactive" }> =>
       request(`/staff/${id}/toggle-status`, {
         method: "PATCH",
+      }),
+    resetPassword: (id: number | string, newPassword: string): Promise<{ message: string; temp_password?: string; new_password?: string; initial_temp_password?: string; staff_id: number; username: string }> =>
+      request(`/staff/${id}/reset-password`, {
+        method: "POST",
+        body: JSON.stringify({ newPassword }),
       }),
   },
 

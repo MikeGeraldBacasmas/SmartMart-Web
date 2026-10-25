@@ -15,6 +15,7 @@ import {
   Eye, EyeOff, Filter, Upload, Image as ImageIcon, Camera, Download,
   Flame, Sparkles, ArrowRight, Award, ArrowLeft, ChevronUp, ChevronDown, List,
   RotateCcw, Percent, Check, AlertCircle, Menu, MapPin, Phone, Clock, Zap, Star, ArrowDown, Lock, Sun, Moon,
+  Loader2, Copy,
 } from "lucide-react";
 
 export const getProductImageUrl = (url?: string | null) => resolveBackendUrl(url);
@@ -3339,6 +3340,67 @@ function AdminStaffPage() {
   const [viewingStaff, setViewingStaff] = useState<StaffItem | null>(null);
   const [showViewPw, setShowViewPw] = useState(false);
 
+  // Reset Staff Password State
+  const [resetStaffTarget, setResetStaffTarget] = useState<StaffItem | null>(null);
+  const [resetStaffPw, setResetStaffPw] = useState("");
+  const [showResetStaffPw, setShowResetStaffPw] = useState(false);
+  const [isResettingStaff, setIsResettingStaff] = useState(false);
+  const [resetStaffSuccessData, setResetStaffSuccessData] = useState<{ username: string; temp_password: string } | null>(null);
+  const [copiedStaffPw, setCopiedStaffPw] = useState(false);
+  const [latestResetMap, setLatestResetMap] = useState<Record<number, string>>({});
+
+  const generateRandomPassword = () => {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%";
+    let pass = "";
+    for (let i = 0; i < 10; i++) {
+      pass += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return pass;
+  };
+
+  const openResetStaffPassword = (s: StaffItem) => {
+    setResetStaffTarget(s);
+    setResetStaffPw(generateRandomPassword());
+    setShowResetStaffPw(true);
+    setResetStaffSuccessData(null);
+    setCopiedStaffPw(false);
+  };
+
+  const handleResetStaffPassword = async () => {
+    if (!resetStaffTarget) return;
+    if (!resetStaffPw || resetStaffPw.trim().length < 6) {
+      toast.error("Password must be at least 6 characters.");
+      return;
+    }
+    setIsResettingStaff(true);
+    try {
+      const cleanPw = resetStaffPw.trim();
+      const res = await api.staff.resetPassword(resetStaffTarget.id, cleanPw);
+      setLatestResetMap(prev => ({ ...prev, [resetStaffTarget.id]: cleanPw }));
+      // Keep initial creation temp_password intact; only set if it didn't exist before
+      if (!resetStaffTarget.temp_password) {
+        const initialPw = res.initial_temp_password || cleanPw;
+        setStaffList(prev => prev.map(s => s.id === resetStaffTarget.id ? { ...s, temp_password: initialPw } : s));
+        if (viewingStaff && viewingStaff.id === resetStaffTarget.id) {
+          setViewingStaff(prev => prev ? { ...prev, temp_password: initialPw } : null);
+        }
+      }
+      setResetStaffSuccessData({ username: res.username || resetStaffTarget.username || "", temp_password: cleanPw });
+      toast.success(`Password for ${resetStaffTarget.full_name} has been reset!`);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to reset staff password.");
+    } finally {
+      setIsResettingStaff(false);
+    }
+  };
+
+  const copyStaffPwToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedStaffPw(true);
+    toast.success("Password copied to clipboard!");
+    setTimeout(() => setCopiedStaffPw(false), 2500);
+  };
+
   const resetForm = () => { setNewName(""); setNewUsername(""); setNewPassword(""); setShowPassword(false); };
   const [staffMsg, setStaffMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -3403,6 +3465,13 @@ function AdminStaffPage() {
                   className="px-4 py-2 text-xs font-bold rounded-xl border-2 border-blue-500 bg-blue-500 text-white hover:bg-blue-600 hover:border-blue-600 transition-all shadow-sm"
                 >
                   View
+                </button>
+                <button
+                  onClick={() => openResetStaffPassword(s)}
+                  title="Reset staff password"
+                  className="px-4 py-2 text-xs font-bold rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-600 hover:bg-amber-500 hover:text-white transition-all shadow-sm"
+                >
+                  Reset PW
                 </button>
                 <button
                   onClick={async () => {
@@ -3488,7 +3557,16 @@ function AdminStaffPage() {
                 <p className="font-bold text-foreground font-mono">{viewingStaff.username}</p>
               </div>
               <div className="p-4 bg-background rounded-xl border border-border">
-                <p className="text-xs text-muted-foreground font-medium mb-1">Temporary Password (Initial)</p>
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-xs text-muted-foreground font-medium">Temporary Password (Initial)</p>
+                  <button
+                    type="button"
+                    onClick={() => openResetStaffPassword(viewingStaff)}
+                    className="text-[11px] font-bold text-amber-600 hover:text-amber-700 bg-amber-50 hover:bg-amber-100 px-2 py-0.5 rounded transition-colors border border-amber-200"
+                  >
+                    Reset
+                  </button>
+                </div>
                 {(viewingStaff.temp_password || (viewingStaff.username && credsMap[viewingStaff.username])) ? (
                   <div className="flex items-center gap-2">
                     <p className="font-bold text-foreground font-mono flex-1">
@@ -3502,6 +3580,24 @@ function AdminStaffPage() {
                   <p className="text-sm text-gray-400 italic">No temporary password recorded</p>
                 )}
               </div>
+
+              {latestResetMap[viewingStaff.id] && (
+                <div className="p-3.5 bg-amber-500/10 rounded-xl border border-amber-500/30">
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-xs text-amber-700 dark:text-amber-400 font-semibold">Latest Reset Password (Active)</p>
+                    <button
+                      type="button"
+                      onClick={() => copyStaffPwToClipboard(latestResetMap[viewingStaff.id])}
+                      className="text-[11px] font-bold text-amber-600 hover:text-amber-700 transition-colors"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                  <p className="font-bold text-foreground font-mono text-sm">
+                    {latestResetMap[viewingStaff.id]}
+                  </p>
+                </div>
+              )}
               <div className="p-4 bg-background rounded-xl border border-border flex gap-4">
                 <div className="flex-1">
                   <p className="text-xs text-muted-foreground font-medium mb-1">Role</p>
@@ -3519,6 +3615,149 @@ function AdminStaffPage() {
           </div>
         </div>
       )}
+
+      {/* Reset Staff Password Modal */}
+      {resetStaffTarget && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-card rounded-2xl border border-border w-full max-w-md p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-4 border-b border-border mb-5">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-500 shrink-0">
+                  <Lock size={20} />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-lg text-foreground">Reset Password</h3>
+                  <p className="text-xs text-muted-foreground">{resetStaffTarget.full_name} (@{resetStaffTarget.username})</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setResetStaffTarget(null)}
+                className="p-1.5 hover:bg-muted rounded-lg transition-colors text-muted-foreground hover:text-foreground"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {resetStaffSuccessData ? (
+              <div className="space-y-4">
+                <div className="p-4 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl text-center space-y-2">
+                  <div className="w-10 h-10 rounded-full bg-emerald-500 text-white flex items-center justify-center mx-auto shadow-md">
+                    <Check size={22} className="stroke-[3]" />
+                  </div>
+                  <h4 className="font-extrabold text-foreground text-sm">Password Reset Successful!</h4>
+                  <p className="text-xs text-muted-foreground">
+                    The staff account password for <span className="font-bold text-foreground">@{resetStaffSuccessData.username}</span> has been updated. Please share the new credentials with the staff member:
+                  </p>
+                </div>
+
+                <div className="p-3.5 bg-background rounded-xl border border-border space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-muted-foreground">Temporary Password</span>
+                    <button
+                      type="button"
+                      onClick={() => copyStaffPwToClipboard(resetStaffSuccessData.temp_password)}
+                      className="flex items-center gap-1 text-xs font-bold text-emerald-600 hover:text-emerald-700 transition-colors"
+                    >
+                      {copiedStaffPw ? <Check size={13} /> : <Copy size={13} />}
+                      <span>{copiedStaffPw ? "Copied!" : "Copy Password"}</span>
+                    </button>
+                  </div>
+                  <div className="p-2.5 bg-muted/60 rounded-lg font-mono text-center font-bold text-base text-foreground tracking-wider select-all border border-border">
+                    {resetStaffSuccessData.temp_password}
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-muted-foreground italic text-center">
+                  The staff member can immediately log into the POS or Staff Portal with this new password.
+                </p>
+
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setResetStaffTarget(null)}
+                    className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold transition-colors shadow-sm"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="p-3 bg-muted/40 rounded-xl border border-border flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+                    <span className="text-emerald-700 font-bold text-sm">{resetStaffTarget.full_name?.charAt(0) || "S"}</span>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs text-muted-foreground font-medium">Staff Account ({resetStaffTarget.role})</p>
+                    <p className="text-sm font-bold text-foreground truncate">{resetStaffTarget.full_name}</p>
+                    <p className="text-xs font-mono text-muted-foreground">@{resetStaffTarget.username} · {resetStaffTarget.staff_code}</p>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-bold text-foreground">
+                      New Temporary Password <span className="text-red-500">*</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setResetStaffPw(generateRandomPassword())}
+                      className="text-[11px] font-bold text-emerald-600 hover:text-emerald-700 transition-colors flex items-center gap-1"
+                    >
+                      <RotateCcw size={11} /> Generate New
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type={showResetStaffPw ? "text" : "password"}
+                      value={resetStaffPw}
+                      onChange={e => setResetStaffPw(e.target.value)}
+                      placeholder="Minimum 6 characters"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-background font-mono text-sm text-foreground pr-10 focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowResetStaffPw(v => !v)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors p-1"
+                    >
+                      {showResetStaffPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-1.5">
+                    Enter or generate a new password (min. 6 characters). This will update their login credentials and the temporary password on file.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2.5 pt-3 border-t border-border">
+                  <button
+                    type="button"
+                    onClick={() => setResetStaffTarget(null)}
+                    className="flex-1 py-2.5 rounded-xl border border-border text-foreground font-bold text-xs hover:bg-muted transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isResettingStaff || !resetStaffPw.trim() || resetStaffPw.trim().length < 6}
+                    onClick={handleResetStaffPassword}
+                    className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs transition-colors shadow-sm disabled:opacity-50 flex items-center justify-center gap-1.5"
+                  >
+                    {isResettingStaff ? (
+                      <>
+                        <Loader2 size={14} className="animate-spin" />
+                        <span>Resetting...</span>
+                      </>
+                    ) : (
+                      "Confirm Reset"
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -3526,7 +3765,7 @@ function AdminStaffPage() {
 // ─── Customers Page ───────────────────────────────────────────────────────────
 
 function CustomersPage() {
-  const { pendingCustomers, registeredCustomers, approvePendingCustomer, denyPendingCustomer } = useStore();
+  const { pendingCustomers, registeredCustomers, approvePendingCustomer, denyPendingCustomer, refreshData } = useStore();
   const [tab, setTab] = useState<"registered" | "pending">("registered");
   const [approveTarget, setApproveTarget] = useState<PendingCustomer | null>(null);
   const [newEmail, setNewEmail] = useState("");
@@ -3536,6 +3775,62 @@ function CustomersPage() {
   const [viewingCustomer, setViewingCustomer] = useState<RegisteredCustomer | null>(null);
   const [showViewCustPw, setShowViewCustPw] = useState(false);
   const [custCredsMap, setCustCredsMap] = useState<Record<string, string>>({});
+
+  // Reset Password Modal State
+  const [resetTarget, setResetTarget] = useState<RegisteredCustomer | null>(null);
+  const [resetPw, setResetPw] = useState("");
+  const [showResetPw, setShowResetPw] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const [resetSuccessData, setResetSuccessData] = useState<{ username: string; temp_password: string } | null>(null);
+  const [copiedPw, setCopiedPw] = useState(false);
+
+  const generateRandomPassword = () => {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%";
+    let pass = "";
+    for (let i = 0; i < 10; i++) {
+      pass += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return pass;
+  };
+
+  const openResetPassword = (c: RegisteredCustomer) => {
+    setResetTarget(c);
+    setResetPw(generateRandomPassword());
+    setShowResetPw(true);
+    setResetSuccessData(null);
+    setCopiedPw(false);
+  };
+
+  const handleResetPassword = async () => {
+    if (!resetTarget) return;
+    if (!resetPw || resetPw.trim().length < 6) {
+      toast.error("Password must be at least 6 characters.");
+      return;
+    }
+    setIsResetting(true);
+    try {
+      const cleanPw = resetPw.trim();
+      const res = await api.customers.resetPassword(resetTarget.id, cleanPw);
+      setCustCredsMap(prev => ({ ...prev, [resetTarget.username]: res.temp_password }));
+      if (viewingCustomer && viewingCustomer.id === resetTarget.id) {
+        setViewingCustomer(prev => prev ? { ...prev, temp_password: res.temp_password } : null);
+      }
+      setResetSuccessData({ username: resetTarget.username, temp_password: res.temp_password });
+      toast.success(`Password for ${resetTarget.full_name} (@${resetTarget.username}) has been reset!`);
+      await refreshData();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to reset customer password.");
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedPw(true);
+    toast.success("Password copied to clipboard!");
+    setTimeout(() => setCopiedPw(false), 2500);
+  };
 
   // Customer discount editing in admin view
   const [editingCustDiscount, setEditingCustDiscount] = useState(false);
@@ -3666,12 +3961,21 @@ function CustomersPage() {
                   <td className="px-4 py-3 text-right text-sm font-bold text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{c.total_purchases}</td>
                   <td className="px-4 py-3 text-sm text-muted-foreground">{c.joined}</td>
                   <td className="px-4 py-3 text-center">
-                    <button
-                      onClick={() => openViewingCustomer(c)}
-                      className="px-4 py-1.5 text-xs font-bold rounded-xl border-2 border-blue-500 bg-blue-500 text-white hover:bg-blue-600 hover:border-blue-600 transition-all shadow-sm"
-                    >
-                      View
-                    </button>
+                    <div className="flex items-center justify-center gap-2">
+                      <button
+                        onClick={() => openViewingCustomer(c)}
+                        className="px-3 py-1.5 text-xs font-bold rounded-xl border-2 border-blue-500 bg-blue-500 text-white hover:bg-blue-600 hover:border-blue-600 transition-all shadow-sm"
+                      >
+                        View
+                      </button>
+                      <button
+                        onClick={() => openResetPassword(c)}
+                        title="Reset customer password"
+                        className="px-3 py-1.5 text-xs font-bold rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-600 hover:bg-amber-500 hover:text-white transition-all shadow-sm"
+                      >
+                        Reset PW
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -3792,7 +4096,16 @@ function CustomersPage() {
                   <p className="font-bold text-foreground font-mono text-sm">{viewingCustomer.username}</p>
                 </div>
                 <div className="p-3.5 bg-background rounded-xl border border-border">
-                  <p className="text-xs text-muted-foreground font-medium mb-1">Temporary Password (Initial)</p>
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-xs text-muted-foreground font-medium">Temporary Password (Initial)</p>
+                    <button
+                      type="button"
+                      onClick={() => openResetPassword(viewingCustomer)}
+                      className="text-[11px] font-bold text-amber-600 hover:text-amber-700 bg-amber-50 hover:bg-amber-100 px-2 py-0.5 rounded transition-colors border border-amber-200"
+                    >
+                      Reset
+                    </button>
+                  </div>
                   {(viewingCustomer.temp_password || custCredsMap[viewingCustomer.username]) ? (
                     <div className="flex items-center gap-2">
                       <p className="font-bold text-foreground font-mono flex-1 text-sm">
@@ -3931,6 +4244,149 @@ function CustomersPage() {
           </div>
         </div>
       )}
+
+      {/* Reset Customer Password Modal */}
+      {resetTarget && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-card rounded-2xl border border-border w-full max-w-md p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-4 border-b border-border mb-5">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-500 shrink-0">
+                  <Lock size={20} />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-lg text-foreground">Reset Password</h3>
+                  <p className="text-xs text-muted-foreground">{resetTarget.full_name} (@{resetTarget.username})</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setResetTarget(null)}
+                className="p-1.5 hover:bg-muted rounded-lg transition-colors text-muted-foreground hover:text-foreground"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {resetSuccessData ? (
+              <div className="space-y-4">
+                <div className="p-4 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl text-center space-y-2">
+                  <div className="w-10 h-10 rounded-full bg-emerald-500 text-white flex items-center justify-center mx-auto shadow-md">
+                    <Check size={22} className="stroke-[3]" />
+                  </div>
+                  <h4 className="font-extrabold text-foreground text-sm">Password Reset Successful!</h4>
+                  <p className="text-xs text-muted-foreground">
+                    The account password for <span className="font-bold text-foreground">@{resetSuccessData.username}</span> has been updated. Please share the new credentials with the customer:
+                  </p>
+                </div>
+
+                <div className="p-3.5 bg-background rounded-xl border border-border space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-muted-foreground">Temporary Password</span>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(resetSuccessData.temp_password)}
+                      className="flex items-center gap-1 text-xs font-bold text-emerald-600 hover:text-emerald-700 transition-colors"
+                    >
+                      {copiedPw ? <Check size={13} /> : <Copy size={13} />}
+                      <span>{copiedPw ? "Copied!" : "Copy Password"}</span>
+                    </button>
+                  </div>
+                  <div className="p-2.5 bg-muted/60 rounded-lg font-mono text-center font-bold text-base text-foreground tracking-wider select-all border border-border">
+                    {resetSuccessData.temp_password}
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-muted-foreground italic text-center">
+                  The customer can immediately log into their account using their username and this new password.
+                </p>
+
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setResetTarget(null)}
+                    className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold transition-colors shadow-sm"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="p-3 bg-muted/40 rounded-xl border border-border flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-full bg-purple-100 flex items-center justify-center shrink-0">
+                    <span className="text-purple-700 font-bold text-sm">{resetTarget.full_name.charAt(0)}</span>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs text-muted-foreground font-medium">Customer Account</p>
+                    <p className="text-sm font-bold text-foreground truncate">{resetTarget.full_name}</p>
+                    <p className="text-xs font-mono text-muted-foreground">@{resetTarget.username} · {resetTarget.customer_code}</p>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-bold text-foreground">
+                      New Temporary Password <span className="text-red-500">*</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setResetPw(generateRandomPassword())}
+                      className="text-[11px] font-bold text-emerald-600 hover:text-emerald-700 transition-colors flex items-center gap-1"
+                    >
+                      <RotateCcw size={11} /> Generate New
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type={showResetPw ? "text" : "password"}
+                      value={resetPw}
+                      onChange={e => setResetPw(e.target.value)}
+                      placeholder="Minimum 6 characters"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-background font-mono text-sm text-foreground pr-10 focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowResetPw(v => !v)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors p-1"
+                    >
+                      {showResetPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-1.5">
+                    Enter or generate a new password (min. 6 characters). This will update their login credentials and the temporary password on file.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2.5 pt-3 border-t border-border">
+                  <button
+                    type="button"
+                    onClick={() => setResetTarget(null)}
+                    className="flex-1 py-2.5 rounded-xl border border-border text-foreground font-bold text-xs hover:bg-muted transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isResetting || !resetPw.trim() || resetPw.trim().length < 6}
+                    onClick={handleResetPassword}
+                    className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs transition-colors shadow-sm disabled:opacity-50 flex items-center justify-center gap-1.5"
+                  >
+                    {isResetting ? (
+                      <>
+                        <Loader2 size={14} className="animate-spin" />
+                        <span>Resetting...</span>
+                      </>
+                    ) : (
+                      "Confirm Reset"
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -3949,6 +4405,7 @@ function POSPage({ products, categories = CATEGORIES }: { products: Product[]; c
   const [cashAmount, setCashAmount] = useState("");
   const [showReceipt, setShowReceipt] = useState(false);
   const [completedTrx, setCompletedTrx] = useState<Transaction | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   // Discount states (Senior Citizen / PWD)
   const [discountType, setDiscountType] = useState<"None" | "Senior Citizen" | "PWD">("None");
@@ -3997,18 +4454,55 @@ function POSPage({ products, categories = CATEGORIES }: { products: Product[]; c
   const total = Math.max(0, subtotal - discountAmount);
   const cash = parseFloat(cashAmount) || 0;
   const change = Math.max(0, cash - total);
-  const canComplete = cart.length > 0 && cash >= total;
+
+  // Check if any cart item exceeds available stock
+  const stockExceededItems = useMemo(() => {
+    return cart
+      .map(item => {
+        const live = products.find(p => p.id === item.product.id) || item.product;
+        return {
+          ...item,
+          availableStock: live.stock,
+          exceeds: item.qty > live.stock,
+        };
+      })
+      .filter(i => i.exceeds);
+  }, [cart, products]);
+
+  const hasStockExceeded = stockExceededItems.length > 0;
+  const canComplete = cart.length > 0 && cash >= total && !isProcessing && !hasStockExceeded;
 
   const addToCart = (product: Product) => {
+    if (isProcessing) return;
+    const live = products.find(p => p.id === product.id) || product;
+    if (live.stock <= 0) {
+      toast.error(`"${product.name}" is out of stock!`);
+      return;
+    }
+    const currentInCart = cart.find(i => i.product.id === product.id)?.qty || 0;
+    if (currentInCart + 1 > live.stock) {
+      toast.error(`Cannot add more "${product.name}". Only ${live.stock} left in stock!`);
+      return;
+    }
     setCart(prev => {
       const ex = prev.find(i => i.product.id === product.id);
-      if (ex) return prev.map(i => i.product.id === product.id ? { ...i, qty: i.qty + 1 } : i);
-      return [...prev, { product, qty: 1 }];
+      if (ex) return prev.map(i => i.product.id === product.id ? { ...i, product: live, qty: i.qty + 1 } : i);
+      return [...prev, { product: live, qty: 1 }];
     });
   };
 
   const updateQty = (id: number, delta: number) => {
-    setCart(prev => prev.map(i => i.product.id === id ? { ...i, qty: i.qty + delta } : i).filter(i => i.qty > 0));
+    if (isProcessing) return;
+    const item = cart.find(i => i.product.id === id);
+    if (!item) return;
+    const live = products.find(p => p.id === id) || item.product;
+
+    if (delta > 0 && item.qty + delta > live.stock) {
+      toast.error(`Cannot increase "${item.product.name}". Only ${live.stock} left in stock!`);
+      return;
+    }
+
+    setCart(prev => prev.map(i => i.product.id === id ? { ...i, product: live, qty: i.qty + delta } : i).filter(i => i.qty > 0));
   };
 
   const custResults = custSearch.trim().length > 0
@@ -4021,18 +4515,36 @@ function POSPage({ products, categories = CATEGORIES }: { products: Product[]; c
     : [];
 
   const completeTransaction = async () => {
+    if (isProcessing) return;
+    if (hasStockExceeded) {
+      const first = stockExceededItems[0];
+      toast.error(
+        `Cannot complete transaction: "${first.product.name}" exceeds available stock (Only ${first.availableStock} left, but ${first.qty} in order)!`
+      );
+      return;
+    }
+    if (!canComplete) {
+      if (cash < total) {
+        toast.error(`Cash tendered is insufficient. Short by ${peso(total - cash)}.`);
+      }
+      return;
+    }
+    setIsProcessing(true);
     try {
       const apiItems = cart.map(i => ({ product_id: i.product.id, quantity: i.qty }));
-      const resTrx: any = await api.transactions.create({
-        customer_id: linkedCustomer ? linkedCustomer.id : null,
-        cashier_id: getSavedUser()?.id || 1,
-        cash_tendered: cash,
-        items: apiItems,
-        discount_type: isDiscountActive ? discountType : "None",
-        discount_id_no: isDiscountActive ? discountIdNo.trim() : null,
-        discount_amount: discountAmount,
-        save_customer_discount: Boolean(linkedCustomer && saveDiscountToProfile && isDiscountActive),
-      });
+      const [resTrx]: any = await Promise.all([
+        api.transactions.create({
+          customer_id: linkedCustomer ? linkedCustomer.id : null,
+          cashier_id: getSavedUser()?.id || 1,
+          cash_tendered: cash,
+          items: apiItems,
+          discount_type: isDiscountActive ? discountType : "None",
+          discount_id_no: isDiscountActive ? discountIdNo.trim() : null,
+          discount_amount: discountAmount,
+          save_customer_discount: Boolean(linkedCustomer && saveDiscountToProfile && isDiscountActive),
+        }),
+        new Promise(resolve => setTimeout(resolve, 600)),
+      ]);
 
       const trx: Transaction = {
         id: resTrx?.receipt_no || `TRX-2026-${Math.floor(Math.random() * 9000) + 1000}`,
@@ -4061,10 +4573,14 @@ function POSPage({ products, categories = CATEGORIES }: { products: Product[]; c
       await refreshData();
     } catch (err: any) {
       toast.error(err.message || "Failed to complete transaction");
+      await refreshData();
+    } finally {
+      setIsProcessing(false);
     }
   };
 
   const clearTransaction = () => {
+    if (isProcessing) return;
     setCart([]);
     setLinkedCustomer(null);
     setCustSearch("");
@@ -4095,10 +4611,11 @@ function POSPage({ products, categories = CATEGORIES }: { products: Product[]; c
           <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
             {filtered.map(product => {
               const inCart = cart.find(i => i.product.id === product.id);
+              const isOverStock = inCart && inCart.qty > product.stock;
               return (
-                <button key={product.id} onClick={() => addToCart(product)} className={`relative p-3.5 rounded-2xl border-2 text-left transition-all hover:shadow-md active:scale-95 ${inCart ? "border-emerald-500 bg-emerald-50" : "border-border bg-card hover:border-emerald-300"}`}>
+                <button key={product.id} onClick={() => addToCart(product)} disabled={isProcessing} className={`relative p-3.5 rounded-2xl border-2 text-left transition-all hover:shadow-md active:scale-95 disabled:opacity-75 disabled:pointer-events-none ${isOverStock ? "border-red-400 bg-red-50/50" : inCart ? "border-emerald-500 bg-emerald-50" : "border-border bg-card hover:border-emerald-300"}`}>
                   {inCart && (
-                    <span className="absolute top-2 right-2 w-5 h-5 bg-emerald-500 text-white text-xs font-extrabold rounded-full flex items-center justify-center">{inCart.qty}</span>
+                    <span className={`absolute top-2 right-2 px-1.5 min-w-[20px] h-5 ${isOverStock ? "bg-red-500" : "bg-emerald-500"} text-white text-xs font-extrabold rounded-full flex items-center justify-center`}>{inCart.qty}</span>
                   )}
                   <div className={`w-full aspect-square rounded-xl mb-2.5 overflow-hidden flex items-center justify-center ${CAT_BG[product.category] ?? "bg-gray-50"}`}>
                     {product.image_url ? (
@@ -4109,7 +4626,7 @@ function POSPage({ products, categories = CATEGORIES }: { products: Product[]; c
                   </div>
                   <p className="text-xs font-bold text-foreground leading-tight line-clamp-2">{product.name}</p>
                   <p className="text-sm font-extrabold text-emerald-600 mt-1" style={{ fontFamily: "'DM Mono', monospace" }}>{peso(product.price)}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{product.stock} left</p>
+                  <p className={`text-xs mt-0.5 ${product.stock <= 2 ? "text-amber-600 font-semibold" : "text-muted-foreground"}`}>{product.stock} left</p>
                 </button>
               );
             })}
@@ -4138,28 +4655,50 @@ function POSPage({ products, categories = CATEGORIES }: { products: Product[]; c
               <p className="text-xs">Tap products to add them</p>
             </div>
           ) : (
-            cart.map(item => (
-              <div key={item.product.id} className="flex items-center gap-2.5 p-2.5 bg-background rounded-xl">
-                <div className={`w-9 h-9 rounded-lg overflow-hidden shrink-0 flex items-center justify-center border border-border/40 ${CAT_BG[item.product.category] ?? "bg-gray-100"}`}>
-                  {item.product.image_url ? (
-                    <img src={getProductImageUrl(item.product.image_url) || ""} alt={item.product.name} className="w-full h-full object-cover" />
-                  ) : (
-                    <Package size={15} className="text-slate-400" />
+            cart.map(item => {
+              const liveStock = products.find(p => p.id === item.product.id)?.stock ?? item.product.stock;
+              const isOverStock = item.qty > liveStock;
+              return (
+                <div key={item.product.id} className={`p-2.5 rounded-xl transition-all ${isOverStock ? "bg-red-50/90 border border-red-300" : "bg-background"}`}>
+                  <div className="flex items-center gap-2.5">
+                    <div className={`w-9 h-9 rounded-lg overflow-hidden shrink-0 flex items-center justify-center border border-border/40 ${CAT_BG[item.product.category] ?? "bg-gray-100"}`}>
+                      {item.product.image_url ? (
+                        <img src={getProductImageUrl(item.product.image_url) || ""} alt={item.product.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <Package size={15} className="text-slate-400" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-foreground truncate">{item.product.name}</p>
+                      <p className="text-xs text-muted-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{peso(item.product.price)} each</p>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button onClick={() => updateQty(item.product.id, -1)} disabled={isProcessing} className="w-6 h-6 rounded-full bg-muted hover:bg-slate-200 flex items-center justify-center transition-colors disabled:opacity-50"><Minus size={10} /></button>
+                      <span className={`w-6 text-center text-sm font-extrabold ${isOverStock ? "text-red-600 font-bold" : ""}`} style={{ fontFamily: "'DM Mono', monospace" }}>{item.qty}</span>
+                      <button onClick={() => updateQty(item.product.id, 1)} disabled={isProcessing || item.qty >= liveStock} className={`w-6 h-6 rounded-full bg-muted flex items-center justify-center transition-colors ${item.qty >= liveStock ? "opacity-30 cursor-not-allowed" : "hover:bg-slate-200"}`}><Plus size={10} /></button>
+                    </div>
+                    <span className="text-sm font-bold w-14 text-right shrink-0 text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{peso(item.product.price * item.qty)}</span>
+                    <button onClick={() => setCart(prev => prev.filter(i => i.product.id !== item.product.id))} disabled={isProcessing} className="p-1 text-muted-foreground hover:text-red-500 transition-colors shrink-0 disabled:opacity-50"><Trash2 size={12} /></button>
+                  </div>
+
+                  {isOverStock && (
+                    <div className="mt-2 flex items-center justify-between text-[11px] font-bold text-red-700 bg-red-100/90 px-2 py-1 rounded-md">
+                      <span className="flex items-center gap-1">
+                        <AlertCircle size={13} className="shrink-0 text-red-600" />
+                        Exceeds stock ({liveStock} left, {item.qty} in order)
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setCart(prev => prev.map(i => i.product.id === item.product.id ? { ...i, qty: liveStock } : i))}
+                        className="text-[10px] underline font-extrabold hover:text-red-900 ml-1.5 shrink-0"
+                      >
+                        Adjust to {liveStock}
+                      </button>
+                    </div>
                   )}
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold text-foreground truncate">{item.product.name}</p>
-                  <p className="text-xs text-muted-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{peso(item.product.price)} each</p>
-                </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <button onClick={() => updateQty(item.product.id, -1)} className="w-6 h-6 rounded-full bg-muted hover:bg-slate-200 flex items-center justify-center transition-colors"><Minus size={10} /></button>
-                  <span className="w-6 text-center text-sm font-extrabold" style={{ fontFamily: "'DM Mono', monospace" }}>{item.qty}</span>
-                  <button onClick={() => updateQty(item.product.id, 1)} className="w-6 h-6 rounded-full bg-muted hover:bg-slate-200 flex items-center justify-center transition-colors"><Plus size={10} /></button>
-                </div>
-                <span className="text-sm font-bold w-14 text-right shrink-0 text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{peso(item.product.price * item.qty)}</span>
-                <button onClick={() => setCart(prev => prev.filter(i => i.product.id !== item.product.id))} className="p-1 text-muted-foreground hover:text-red-500 transition-colors shrink-0"><Trash2 size={12} /></button>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
 
@@ -4175,13 +4714,13 @@ function POSPage({ products, categories = CATEGORIES }: { products: Product[]; c
                   {linkedCustomer.customer_code} • @{linkedCustomer.username}
                 </p>
               </div>
-              <button onClick={() => { setLinkedCustomer(null); setCustSearch(""); }} className="text-muted-foreground hover:text-red-500 transition-colors shrink-0 p-0.5"><X size={13} /></button>
+              <button onClick={() => { setLinkedCustomer(null); setCustSearch(""); }} disabled={isProcessing} className="text-muted-foreground hover:text-red-500 transition-colors shrink-0 p-0.5 disabled:opacity-50"><X size={13} /></button>
             </div>
           ) : (
             <div className="relative">
               <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <input value={custSearch} onChange={e => setCustSearch(e.target.value)} placeholder="Search customer name or ID..." className="w-full pl-7 pr-3 py-1.5 rounded-lg border border-border bg-background text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500/30" />
-              {custResults.length > 0 && (
+              <input value={custSearch} onChange={e => setCustSearch(e.target.value)} disabled={isProcessing} placeholder="Search customer name or ID..." className="w-full pl-7 pr-3 py-1.5 rounded-lg border border-border bg-background text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500/30 disabled:opacity-50" />
+              {custResults.length > 0 && !isProcessing && (
                 <div className="absolute bottom-full mb-1 left-0 right-0 bg-card border border-border rounded-xl shadow-xl z-20 max-h-48 overflow-y-auto">
                   {custResults.map(c => {
                     const hasDiscount = (c.discount_type === "Senior Citizen" || c.discount_type === "PWD") && c.discount_id_no;
@@ -4231,6 +4770,7 @@ function POSPage({ products, categories = CATEGORIES }: { products: Product[]; c
                 <button
                   key={type}
                   type="button"
+                  disabled={isProcessing}
                   onClick={() => {
                     setDiscountType(type);
                     if (type === "None") setDiscountIdNo("");
@@ -4242,7 +4782,7 @@ function POSPage({ products, categories = CATEGORIES }: { products: Product[]; c
                       setDiscountIdNo(linkedCustomer.discount_id_no);
                     }
                   }}
-                  className={`py-1 px-1.5 rounded-md text-[11px] font-bold transition-all text-center ${
+                  className={`py-1 px-1.5 rounded-md text-[11px] font-bold transition-all text-center disabled:opacity-50 ${
                     active
                       ? "bg-white text-emerald-700 shadow-sm border border-emerald-200"
                       : "text-muted-foreground hover:text-foreground"
@@ -4273,13 +4813,14 @@ function POSPage({ products, categories = CATEGORIES }: { products: Product[]; c
                 <input
                   type="text"
                   value={discountIdNo}
+                  disabled={isProcessing}
                   onChange={e => setDiscountIdNo(e.target.value)}
                   placeholder={
                     discountType === "Senior Citizen"
                       ? "Enter OSCA / Senior ID No."
                       : "Enter PWD ID No."
                   }
-                  className={`w-full px-2.5 py-1 pr-7 text-xs rounded-lg border bg-background font-mono font-medium focus:outline-none focus:ring-1 ${
+                  className={`w-full px-2.5 py-1 pr-7 text-xs rounded-lg border bg-background font-mono font-medium focus:outline-none focus:ring-1 disabled:opacity-50 ${
                     isDiscountActive
                       ? "border-emerald-400 focus:ring-emerald-400/30 text-emerald-800"
                       : "border-amber-400 focus:ring-amber-400/30"
@@ -4309,8 +4850,9 @@ function POSPage({ products, categories = CATEGORIES }: { products: Product[]; c
                   <input
                     type="checkbox"
                     checked={saveDiscountToProfile}
+                    disabled={isProcessing}
                     onChange={e => setSaveDiscountToProfile(e.target.checked)}
-                    className="rounded text-emerald-600 focus:ring-emerald-500 w-3 h-3"
+                    className="rounded text-emerald-600 focus:ring-emerald-500 w-3 h-3 disabled:opacity-50"
                   />
                   <span>Save ID to customer profile</span>
                 </label>
@@ -4340,10 +4882,10 @@ function POSPage({ products, categories = CATEGORIES }: { products: Product[]; c
 
           <div>
             <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Cash Tendered</label>
-            <input type="number" value={cashAmount} onChange={e => setCashAmount(e.target.value)} placeholder="0.00" className="mt-1 w-full px-3 py-1.5 rounded-lg border border-border bg-background text-base font-extrabold text-center focus:outline-none focus:ring-2 focus:ring-emerald-500/30" style={{ fontFamily: "'DM Mono', monospace" }} />
+            <input type="number" value={cashAmount} onChange={e => setCashAmount(e.target.value)} disabled={isProcessing} placeholder="0.00" className="mt-1 w-full px-3 py-1.5 rounded-lg border border-border bg-background text-base font-extrabold text-center focus:outline-none focus:ring-2 focus:ring-emerald-500/30 disabled:opacity-50" style={{ fontFamily: "'DM Mono', monospace" }} />
             <div className="flex gap-1.5 mt-1.5">
               {[50, 100, 500, 1000].map(amt => (
-                <button key={amt} onClick={() => setCashAmount(String(amt))} className="flex-1 py-1 text-xs font-bold rounded-lg bg-muted hover:bg-slate-200 transition-colors">₱{amt}</button>
+                <button key={amt} onClick={() => setCashAmount(String(amt))} disabled={isProcessing} className="flex-1 py-1 text-xs font-bold rounded-lg bg-muted hover:bg-slate-200 transition-colors disabled:opacity-50">₱{amt}</button>
               ))}
             </div>
           </div>
@@ -4361,15 +4903,83 @@ function POSPage({ products, categories = CATEGORIES }: { products: Product[]; c
             </div>
           )}
 
-          <button onClick={completeTransaction} disabled={!canComplete} className={`w-full py-2.5 rounded-xl text-sm font-extrabold transition-all flex items-center justify-center gap-2 ${canComplete ? "bg-emerald-600 text-white hover:bg-emerald-700 shadow-md shadow-emerald-600/20" : "bg-muted text-muted-foreground cursor-not-allowed"}`}>
-            <CheckCircle size={15} />
-            Complete Transaction
+          {/* Stock Exceeded Alert Banner */}
+          {hasStockExceeded && (
+            <div className="p-2.5 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2 text-xs text-red-700 animate-in fade-in">
+              <AlertCircle size={16} className="text-red-600 shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="font-extrabold text-red-800">Cannot Complete Transaction</p>
+                <p className="text-[11px] text-red-600 mt-0.5 leading-snug">
+                  {stockExceededItems.map(i => `"${i.product.name}" (${i.qty} in order, only ${i.availableStock} left in stock)`).join(" • ")}
+                </p>
+              </div>
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={completeTransaction}
+            disabled={isProcessing || (!canComplete && !hasStockExceeded && (cart.length === 0 || cash < total))}
+            className={`w-full py-2.5 rounded-xl text-sm font-extrabold transition-all flex items-center justify-center gap-2 ${
+              isProcessing
+                ? "bg-emerald-700 text-white cursor-wait opacity-90 shadow-sm"
+                : hasStockExceeded
+                  ? "bg-red-600 text-white hover:bg-red-700 shadow-md shadow-red-600/20 active:scale-[0.99] cursor-pointer"
+                  : canComplete
+                    ? "bg-emerald-600 text-white hover:bg-emerald-700 shadow-md shadow-emerald-600/20 active:scale-[0.99]"
+                    : "bg-muted text-muted-foreground cursor-not-allowed"
+            }`}
+          >
+            {isProcessing ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                <span>Processing Transaction...</span>
+              </>
+            ) : hasStockExceeded ? (
+              <>
+                <AlertCircle size={15} />
+                <span>Cannot Complete (Stock Exceeded)</span>
+              </>
+            ) : (
+              <>
+                <CheckCircle size={15} />
+                <span>Complete Transaction</span>
+              </>
+            )}
           </button>
           {cart.length > 0 && (
-            <button onClick={clearTransaction} className="w-full py-1 text-[11px] font-semibold text-muted-foreground hover:text-red-500 transition-colors">Clear Order</button>
+            <button
+              onClick={clearTransaction}
+              disabled={isProcessing}
+              className="w-full py-1 text-[11px] font-semibold text-muted-foreground hover:text-red-500 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Clear Order
+            </button>
           )}
         </div>
       </div>
+
+      {/* Transaction processing overlay */}
+      {isProcessing && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-all animate-in fade-in duration-200">
+          <div className="bg-card border border-border/80 rounded-3xl p-6 shadow-2xl flex flex-col items-center gap-4 text-center max-w-xs w-full">
+            <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 flex items-center justify-center text-emerald-600">
+              <Loader2 size={30} className="animate-spin" />
+            </div>
+            <div>
+              <h3 className="font-extrabold text-foreground text-base">Processing Transaction</h3>
+              <p className="text-xs text-muted-foreground mt-1">Recording payment and updating inventory...</p>
+            </div>
+            <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
+              <div className="bg-emerald-600 h-full rounded-full animate-pulse w-3/4"></div>
+            </div>
+            <div className="flex items-center gap-1.5 text-[11px] font-mono text-muted-foreground">
+              <Clock size={12} className="text-emerald-500 animate-spin" />
+              <span>Please do not close or navigate away</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Receipt modal */}
       {showReceipt && completedTrx && (
