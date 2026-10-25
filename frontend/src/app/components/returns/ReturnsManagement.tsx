@@ -5,7 +5,7 @@ import {
   Plus, User, Receipt, ArrowLeft, Phone, Calendar, ShoppingBag, CheckCircle2
 } from "lucide-react";
 import { toast } from "sonner";
-import { api, ProductReturn, ReturnItemRecord, RegisteredCustomer, TransactionItem } from "../../../api";
+import { api, ProductReturn, ReturnItemRecord, RegisteredCustomer, TransactionItem, notifyStockOrDataChanged } from "../../../api";
 import RequestReturnModal from "./RequestReturnModal";
 
 function peso(amount: number | string) {
@@ -66,14 +66,13 @@ export default function ReturnsManagement({ role = "admin", onReturnsUpdated }: 
       });
       setReturns(res.returns);
       setSummary(res.summary);
-      if (onReturnsUpdated) onReturnsUpdated();
     } catch (err: any) {
       console.error("Error loading returns:", err);
       toast.error(err.message || "Failed to load returns");
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, search, onReturnsUpdated]);
+  }, [statusFilter, search]);
 
   useEffect(() => {
     loadReturns();
@@ -220,6 +219,8 @@ export default function ReturnsManagement({ role = "admin", onReturnsUpdated }: 
       toast.success(`Return marked as ${status}`);
       setReviewReturn(null);
       loadReturns();
+      if (onReturnsUpdated) onReturnsUpdated();
+      notifyStockOrDataChanged();
     } catch (err: any) {
       toast.error(err.message || "Failed to update return status");
     } finally {
@@ -758,6 +759,7 @@ export default function ReturnsManagement({ role = "admin", onReturnsUpdated }: 
                             (tx.items && tx.items.length > 0 && tx.items.every(it => it.is_fully_returned || (it.already_returned !== undefined && it.already_returned >= it.quantity)))
                           );
                           const hasReturnedItems = Boolean(tx.has_returned_items || (tx.items && tx.items.some(it => it.already_returned !== undefined && it.already_returned > 0)));
+                          const isWindowExpired = Boolean(tx.is_return_window_expired);
 
                           return (
                             <div
@@ -774,6 +776,10 @@ export default function ReturnsManagement({ role = "admin", onReturnsUpdated }: 
                                       <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border">
                                         Already Returned
                                       </span>
+                                    ) : isWindowExpired ? (
+                                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border flex items-center gap-1">
+                                        <Clock size={11} /> Return Period Ended
+                                      </span>
                                     ) : hasReturnedItems ? (
                                       <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
                                         Partially Returned
@@ -784,7 +790,7 @@ export default function ReturnsManagement({ role = "admin", onReturnsUpdated }: 
                                       </span>
                                     )}
                                   </div>
-                                  <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
+                                  <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1 flex-wrap">
                                     <span>{tx.date}</span>
                                     <span>·</span>
                                     <span>Cashier: {tx.cashier}</span>
@@ -811,6 +817,13 @@ export default function ReturnsManagement({ role = "admin", onReturnsUpdated }: 
                                       <span className="px-3 py-2 rounded-xl bg-muted text-muted-foreground border border-border text-xs font-bold flex items-center gap-1.5 cursor-default">
                                         <CheckCircle2 size={13} className="text-muted-foreground" /> Already Returned
                                       </span>
+                                    ) : isWindowExpired ? (
+                                      <span
+                                        title="Items can only be returned within 24 hours of purchase"
+                                        className="px-3 py-2 rounded-xl bg-muted/60 text-muted-foreground border border-border text-xs font-medium flex items-center gap-1.5 cursor-not-allowed select-none"
+                                      >
+                                        <Clock size={13} className="text-muted-foreground" /> Return Period Ended
+                                      </span>
                                     ) : role !== "admin" ? (
                                       <button
                                         type="button"
@@ -836,26 +849,24 @@ export default function ReturnsManagement({ role = "admin", onReturnsUpdated }: 
                                     </span>
                                   ) : (
                                     <>
-                                      {tx.items
-                                        .filter(it => it.is_returnable !== false && (it.available_quantity === undefined || it.available_quantity > 0))
-                                        .map((it, idx) => {
-                                          const isMatched = receiptSearch.trim() && it.product_name.toLowerCase().includes(receiptSearch.toLowerCase().trim());
-                                          const displayQty = it.available_quantity !== undefined ? it.available_quantity : it.quantity;
-                                          return (
-                                            <span
-                                              key={idx}
-                                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] transition-all ${
-                                                isMatched
-                                                  ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border border-emerald-500/40 font-extrabold shadow-xs"
-                                                  : "bg-muted text-foreground border border-border font-medium"
-                                              }`}
-                                            >
-                                              <span>{it.product_name}</span>
-                                              <span className="text-[10px] text-muted-foreground font-mono font-bold">×{displayQty}</span>
-                                            </span>
-                                          );
-                                        })}
-                                      {hasReturnedItems && (
+                                      {tx.items.map((it, idx) => {
+                                        const isMatched = receiptSearch.trim() && it.product_name.toLowerCase().includes(receiptSearch.toLowerCase().trim());
+                                        const displayQty = it.available_quantity !== undefined ? it.available_quantity : it.quantity;
+                                        return (
+                                          <span
+                                            key={idx}
+                                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] transition-all ${
+                                              isMatched
+                                                ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border border-emerald-500/40 font-extrabold shadow-xs"
+                                                : "bg-muted text-foreground border border-border font-medium"
+                                            }`}
+                                          >
+                                            <span>{it.product_name}</span>
+                                            <span className="text-[10px] text-muted-foreground font-mono font-bold">×{displayQty}</span>
+                                          </span>
+                                        );
+                                      })}
+                                      {hasReturnedItems && !isWindowExpired && (
                                         <span className="text-[10px] font-bold text-muted-foreground italic ml-1">
                                           (already returned items excluded)
                                         </span>
@@ -1024,6 +1035,8 @@ export default function ReturnsManagement({ role = "admin", onReturnsUpdated }: 
               } catch {}
             }
             loadReturns();
+            if (onReturnsUpdated) onReturnsUpdated();
+            notifyStockOrDataChanged();
           }}
         />
       )}
