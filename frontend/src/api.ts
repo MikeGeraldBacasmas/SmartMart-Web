@@ -36,6 +36,7 @@ export interface ProductItem {
   category: string;
   category_id?: number;
   price: number | string;
+  cost_price?: number | string;
   stock: number;
   low_stock_threshold?: number;
   low_stock?: number | boolean;
@@ -63,6 +64,34 @@ export interface StaffProfileData {
   status: string;
   joined: string;
   username: string;
+}
+
+export interface DamageIncident {
+  id: number;
+  incident_no: string;
+  product_id: number;
+  product_name: string;
+  category?: string;
+  staff_id: number;
+  staff_name: string;
+  quantity: number;
+  unit_cost: number;
+  total_cost: number;
+  reason: string;
+  notes?: string | null;
+  consequence_type: string;
+  consequence_status: string;
+  admin_notes?: string | null;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface CreateDamagePayload {
+  product_id: number;
+  quantity: number;
+  reason: string;
+  notes?: string;
+  unit_cost?: number;
 }
 
 export interface RegisteredCustomer {
@@ -229,6 +258,7 @@ export interface BestSellerItem {
   id: number;
   name: string;
   price: number | string;
+  cost_price?: number | string;
   total_sold: number;
   total_revenue: number | string;
 }
@@ -270,18 +300,32 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     headers["Authorization"] = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_BASE}${endpoint}`, {
-    ...options,
-    headers,
-  });
+  // 6-second timeout controller so requests never hang indefinitely
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 6000);
 
-  const resData = await response.json();
+  try {
+    const response = await fetch(`${API_BASE}${endpoint}`, {
+      ...options,
+      headers,
+      signal: options.signal || controller.signal,
+    });
+    clearTimeout(timeoutId);
 
-  if (!response.ok) {
-    throw new Error(resData.error || "An error occurred with the API request");
+    const resData = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(resData.error || `Request failed with status ${response.status}`);
+    }
+
+    return resData as T;
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    if (err.name === "AbortError") {
+      throw new Error("Request timed out. Please check server connection.");
+    }
+    throw err;
   }
-
-  return resData as T;
 }
 
 export interface CustomerProfileData {
@@ -345,7 +389,7 @@ export const api = {
     getPublic: (): Promise<ProductItem[]> => request<ProductItem[]>("/products/public"),
     getBestSellers: (limit: number = 8): Promise<any[]> => request<any[]>(`/products/best-sellers?limit=${limit}`),
     getLowStock: (): Promise<ProductItem[]> => request<ProductItem[]>("/products/low-stock"),
-    create: (data: { name: string; category_id: number; price: number; stock: number }): Promise<ProductItem> =>
+    create: (data: { name: string; category_id: number; price: number; stock: number; cost_price?: number }): Promise<ProductItem> =>
       request("/products", {
         method: "POST",
         body: JSON.stringify(data),
@@ -355,7 +399,7 @@ export const api = {
         method: "PATCH",
         body: JSON.stringify({ stock }),
       }),
-    update: (id: number, data: { name: string; category_id: number; price: number; stock: number; image_url?: string | null }): Promise<{ message: string }> =>
+    update: (id: number, data: { name: string; category_id: number; price: number; stock: number; cost_price?: number; image_url?: string | null }): Promise<{ message: string }> =>
       request(`/products/${id}`, {
         method: "PUT",
         body: JSON.stringify(data),
@@ -631,6 +675,29 @@ export const api = {
         body: JSON.stringify(data),
       }),
   },
+
+  // Damaged Items & Staff Liability
+  damages: {
+    getAll: (params?: { staff_id?: number }): Promise<DamageIncident[]> => {
+      const q = params?.staff_id ? `?staff_id=${params.staff_id}` : "";
+      return request<DamageIncident[]>(`/damages${q}`);
+    },
+    getMyIncidents: (): Promise<DamageIncident[]> =>
+      request<DamageIncident[]>("/damages/my-incidents"),
+    create: (data: CreateDamagePayload): Promise<{ message: string; incident: DamageIncident; new_stock: number }> =>
+      request("/damages", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    updateStatus: (
+      id: number | string,
+      data: { consequence_status: string; admin_notes?: string }
+    ): Promise<{ message: string; incident: DamageIncident }> =>
+      request(`/damages/${id}/status`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
+  },
 };
 
 export type ReturnStatus = "Pending" | "Approved" | "Completed" | "Rejected" | "Cancelled";
@@ -663,6 +730,11 @@ export interface ProductReturn {
   customer_notes?: string | null;
   admin_notes?: string | null;
   refund_amount: number | string;
+  replacement_product_id?: number | null;
+  replacement_product_name?: string | null;
+  replacement_quantity?: number;
+  replacement_unit_price?: number | string;
+  additional_amount_paid?: number | string;
   created_at: string;
   processed_at?: string | null;
   processed_by_username?: string | null;
@@ -723,6 +795,13 @@ export interface CreateReturnPayload {
   status?: "Completed" | "Approved" | "Rejected" | "Pending";
   admin_notes?: string;
   restock?: boolean;
+  replacement_item?: {
+    product_id: number;
+    product_name?: string;
+    quantity: number;
+    unit_price: number;
+    additional_amount_paid?: number;
+  };
   items: Array<{
     transaction_item_id: number;
     quantity: number;

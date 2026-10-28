@@ -5,6 +5,7 @@ import { api, resolveBackendUrl, getSavedUser, UserPayload, RegisteredCustomer, 
 import logoImg from "../assets/SmartMart_Logo.jpg";
 import ReportsPage from "./components/reports/ReportsPage";
 import ReturnsManagement from "./components/returns/ReturnsManagement";
+import RequestReturnModal from "./components/returns/RequestReturnModal";
 import CustomerReturnHistoryView from "./components/returns/CustomerReturnHistoryView";
 import CustomerAnalytics from "./components/analytics/CustomerAnalytics";
 import {
@@ -425,6 +426,7 @@ const NAV_ITEMS: Record<SidebarRole, NavItem[]> = {
   staff: [
     { id: "dashboard", icon: <LayoutDashboard size={18} />, label: "Dashboard" },
     { id: "pos", icon: <ShoppingCart size={18} />, label: "Point of Sale" },
+    { id: "inventory", icon: <BarChart3 size={18} />, label: "Inventory" },
     { id: "transactions", icon: <Receipt size={18} />, label: "Transactions" },
     { id: "returns", icon: <RotateCcw size={18} />, label: "Returns" },
     { id: "profile", icon: <User size={18} />, label: "My Profile" },
@@ -3006,8 +3008,10 @@ function InventoryPage({ products, categories = CATEGORIES, catMeta = CAT_META }
 
   // Restock modal states
   const [restockProduct, setRestockProduct] = useState<Product | null>(null);
-  const [restockAmount, setRestockAmount] = useState<string>("10");
-  const [restockMode, setRestockMode] = useState<"add" | "set">("add");
+  const [restockCostPrice, setRestockCostPrice] = useState<string>("");
+  const [restockQuantity, setRestockQuantity] = useState<string>("10");
+  const [restockMarkup, setRestockMarkup] = useState<string>("10");
+  const [restockSellingPrice, setRestockSellingPrice] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -3020,11 +3024,100 @@ function InventoryPage({ products, categories = CATEGORIES, catMeta = CAT_META }
     return ms && mc && mf;
   });
 
+  // Pricing helpers for Restock in Inventory
+  const handleRestockCostChange = (val: string) => {
+    setRestockCostPrice(val);
+    const cost = parseFloat(val);
+    const qty = parseInt(restockQuantity, 10) || 1;
+    const markup = parseFloat(restockMarkup);
+    if (!isNaN(cost) && cost > 0) {
+      const unitCost = qty > 0 ? cost / qty : cost;
+      const rate = !isNaN(markup) ? markup : 0;
+      const autoPrice = (unitCost * (1 + rate / 100)).toFixed(2);
+      setRestockSellingPrice(autoPrice);
+    }
+  };
+
+  const handleRestockQuantityChange = (val: string) => {
+    setRestockQuantity(val);
+    const qty = parseInt(val, 10);
+    const cost = parseFloat(restockCostPrice);
+    const markup = parseFloat(restockMarkup);
+    if (!isNaN(cost) && cost > 0 && !isNaN(qty) && qty > 0) {
+      const unitCost = cost / qty;
+      const rate = !isNaN(markup) ? markup : 0;
+      const autoPrice = (unitCost * (1 + rate / 100)).toFixed(2);
+      setRestockSellingPrice(autoPrice);
+    }
+  };
+
+  const handleRestockMarkupChange = (val: string) => {
+    setRestockMarkup(val);
+    const cost = parseFloat(restockCostPrice);
+    const qty = parseInt(restockQuantity, 10) || 1;
+    const markup = parseFloat(val);
+    if (!isNaN(cost) && cost > 0 && !isNaN(markup)) {
+      const unitCost = qty > 0 ? cost / qty : cost;
+      const autoPrice = (unitCost * (1 + markup / 100)).toFixed(2);
+      setRestockSellingPrice(autoPrice);
+    }
+  };
+
+  const handleRestockMarkupPreset = (pct: number) => {
+    setRestockMarkup(String(pct));
+    const cost = parseFloat(restockCostPrice);
+    const qty = parseInt(restockQuantity, 10) || 1;
+    if (!isNaN(cost) && cost > 0) {
+      const unitCost = qty > 0 ? cost / qty : cost;
+      const autoPrice = (unitCost * (1 + pct / 100)).toFixed(2);
+      setRestockSellingPrice(autoPrice);
+    }
+  };
+
+  const handleRestockSellingPriceChange = (val: string) => {
+    setRestockSellingPrice(val);
+    const sell = parseFloat(val);
+    const cost = parseFloat(restockCostPrice);
+    const qty = parseInt(restockQuantity, 10) || 1;
+    if (!isNaN(sell) && !isNaN(cost) && cost > 0) {
+      const unitCost = qty > 0 ? cost / qty : cost;
+      if (unitCost > 0) {
+        const computedMarkup = (((sell - unitCost) / unitCost) * 100).toFixed(1);
+        setRestockMarkup(computedMarkup.replace(/\.0$/, ""));
+      }
+    }
+  };
+
   const handleOpenRestock = (p: Product) => {
     setRestockProduct(p);
-    setRestockAmount("10");
-    setRestockMode("add");
+    const defaultQty = "10";
+    setRestockQuantity(defaultQty);
     setErrorMsg(null);
+
+    const currentPrice = String(p.price);
+    setRestockSellingPrice(currentPrice);
+
+    const storedTotalCost = localStorage.getItem(`smartmart_product_total_cost_${p.id}`);
+    const storedUnitCost = localStorage.getItem(`smartmart_product_cost_${p.id}`);
+    let initialCost = "";
+    if (storedTotalCost) {
+      initialCost = storedTotalCost;
+    } else if (p.cost_price != null || storedUnitCost) {
+      const uCost = p.cost_price != null ? Number(p.cost_price) : Number(storedUnitCost);
+      initialCost = String((uCost * 10).toFixed(2));
+    }
+    setRestockCostPrice(initialCost);
+
+    const numCost = parseFloat(initialCost);
+    const numSell = Number(p.price);
+    const qty = parseInt(defaultQty, 10) || 1;
+    const unitCost = !isNaN(numCost) && numCost > 0 ? numCost / qty : 0;
+    if (unitCost > 0 && numSell > 0) {
+      const computedMarkup = (((numSell - unitCost) / unitCost) * 100).toFixed(1);
+      setRestockMarkup(computedMarkup.replace(/\.0$/, ""));
+    } else {
+      setRestockMarkup("10");
+    }
   };
 
   const handleCloseRestock = () => {
@@ -3035,45 +3128,55 @@ function InventoryPage({ products, categories = CATEGORIES, catMeta = CAT_META }
 
   const handleConfirmRestock = async () => {
     if (!restockProduct) return;
-    const parsed = parseInt(restockAmount, 10);
-    if (isNaN(parsed)) {
-      setErrorMsg("Please enter a valid stock quantity number.");
-      return;
-    }
-    if (restockMode === "add" && parsed <= 0) {
-      setErrorMsg("Please enter a quantity greater than 0 to add.");
-      return;
-    }
-    if (restockMode === "set" && parsed < 0) {
-      setErrorMsg("Stock quantity cannot be negative.");
+    const qtyToAdd = parseInt(restockQuantity, 10);
+    if (isNaN(qtyToAdd) || qtyToAdd <= 0) {
+      setErrorMsg("Please enter a valid stock quantity to add (at least 1).");
       return;
     }
 
-    const newStockTotal = restockMode === "add" ? restockProduct.stock + parsed : parsed;
+    const newSellingPrice = parseFloat(restockSellingPrice);
+    if (isNaN(newSellingPrice) || newSellingPrice < 0) {
+      setErrorMsg("Please enter a valid selling price.");
+      return;
+    }
+
+    const cost = parseFloat(restockCostPrice);
+    const unitCost = !isNaN(cost) && cost > 0 ? (cost / qtyToAdd) : undefined;
+    const newTotalStock = restockProduct.stock + qtyToAdd;
+
     setIsSubmitting(true);
     setErrorMsg(null);
 
     try {
-      await api.products.updateStock(restockProduct.id, newStockTotal);
+      await api.products.update(restockProduct.id, {
+        name: restockProduct.name,
+        category_id: restockProduct.category_id || 1,
+        price: newSellingPrice,
+        cost_price: unitCost,
+        stock: newTotalStock,
+        image_url: restockProduct.image_url || null,
+      });
+
+      if (!isNaN(cost) && cost > 0) {
+        localStorage.setItem(`smartmart_product_total_cost_${restockProduct.id}`, String(cost));
+        if (unitCost != null) {
+          localStorage.setItem(`smartmart_product_cost_${restockProduct.id}`, String(unitCost));
+        }
+      }
+
       toast.success(
-        restockMode === "add"
-          ? `Restocked "${restockProduct.name}" (+${parsed} units). New stock: ${newStockTotal} units.`
-          : `Updated stock of "${restockProduct.name}" to ${newStockTotal} units.`
+        `Restocked "${restockProduct.name}" (+${qtyToAdd} units, selling price: ₱${newSellingPrice.toFixed(2)}). Total stock: ${newTotalStock}.`
       );
       await refreshData();
       handleCloseRestock();
     } catch (err: any) {
-      const msg = err.message || "Failed to update product stock.";
+      const msg = err.message || "Failed to restock product.";
       setErrorMsg(msg);
       toast.error(msg);
     } finally {
       setIsSubmitting(false);
     }
   };
-
-  const currentStock = restockProduct?.stock ?? 0;
-  const parsedAmt = parseInt(restockAmount, 10) || 0;
-  const calculatedTotal = restockMode === "add" ? currentStock + parsedAmt : parsedAmt;
 
   return (
     <div className="p-6 space-y-5">
@@ -3247,100 +3350,128 @@ function InventoryPage({ products, categories = CATEGORIES, catMeta = CAT_META }
                 </div>
               </div>
 
-              {/* Mode Switcher */}
-              <div className="grid grid-cols-2 gap-1.5 p-1 bg-muted rounded-xl">
-                <button
-                  type="button"
-                  onClick={() => { setRestockMode("add"); setRestockAmount("10"); }}
-                  className={`py-1.5 text-xs font-bold rounded-lg transition-all ${restockMode === "add" ? "bg-card text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"}`}
-                >
-                  + Add to Stock
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setRestockMode("set"); setRestockAmount(String(restockProduct.stock)); }}
-                  className={`py-1.5 text-xs font-bold rounded-lg transition-all ${restockMode === "set" ? "bg-card text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"}`}
-                >
-                  Set Total Count
-                </button>
-              </div>
-
-              {/* Quantity Input Area */}
-              <div>
-                <label className="block text-xs font-bold text-foreground mb-1.5">
-                  {restockMode === "add" ? "Quantity to Add" : "New Total Stock Quantity"}
-                </label>
-                <div className="flex items-center gap-2">
-                  {restockMode === "add" && (
-                    <button
-                      type="button"
-                      onClick={() => setRestockAmount(String(Math.max(1, (parseInt(restockAmount, 10) || 0) - 5)))}
-                      className="w-10 h-10 rounded-xl border border-border bg-card hover:bg-muted flex items-center justify-center text-foreground font-bold shrink-0 transition-colors"
-                    >
-                      <Minus size={15} />
-                    </button>
-                  )}
-                  <input
-                    type="number"
-                    min={restockMode === "add" ? "1" : "0"}
-                    value={restockAmount}
-                    onChange={e => setRestockAmount(e.target.value)}
-                    placeholder={restockMode === "add" ? "e.g. 20" : "e.g. 50"}
-                    className="flex-1 px-4 py-2.5 rounded-xl border border-border bg-background text-center text-base font-extrabold text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500"
-                    style={{ fontFamily: "'DM Mono', monospace" }}
-                    autoFocus
-                  />
-                  {restockMode === "add" && (
-                    <button
-                      type="button"
-                      onClick={() => setRestockAmount(String((parseInt(restockAmount, 10) || 0) + 5))}
-                      className="w-10 h-10 rounded-xl border border-border bg-card hover:bg-muted flex items-center justify-center text-foreground font-bold shrink-0 transition-colors"
-                    >
-                      <Plus size={15} />
-                    </button>
-                  )}
+              {/* PRICING & MARGINS Card */}
+              <div className="p-4 rounded-2xl bg-muted/20 border border-border space-y-3.5 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Pricing & Margins</span>
+                  <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md">
+                    Selling price auto-calculates each
+                  </span>
                 </div>
 
-                {/* Quick Add Presets */}
-                {restockMode === "add" && (
-                  <div className="flex items-center gap-1.5 mt-2.5">
-                    <span className="text-[11px] text-muted-foreground font-medium mr-1">Quick add:</span>
-                    {[5, 10, 20, 50, 100].map(val => (
-                      <button
-                        key={val}
-                        type="button"
-                        onClick={() => setRestockAmount(String(val))}
-                        className={`px-2.5 py-1 text-xs font-bold rounded-lg border transition-all ${
-                          parseInt(restockAmount, 10) === val
-                            ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
-                            : "bg-card text-muted-foreground border-border hover:text-foreground hover:bg-muted"
-                        }`}
-                      >
-                        +{val}
-                      </button>
-                    ))}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-semibold text-foreground">
+                        Cost Price (₱)
+                      </label>
+                      {parseFloat(restockCostPrice) > 0 && parseInt(restockQuantity, 10) > 0 && (
+                        <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                          = {peso(parseFloat(restockCostPrice) / (parseInt(restockQuantity, 10) || 1))}/ea
+                        </span>
+                      )}
+                    </div>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={restockCostPrice}
+                      onChange={e => handleRestockCostChange(e.target.value)}
+                      placeholder="0.00"
+                      min="0"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 font-medium"
+                    />
                   </div>
-                )}
-              </div>
 
-              {/* Calculation / Stock Preview */}
-              <div className="p-3.5 bg-emerald-500/10 rounded-2xl border border-emerald-500/20 space-y-1.5">
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>Current stock:</span>
-                  <span className="font-semibold text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{currentStock} units</span>
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-semibold text-foreground">Stock Quantity</label>
+                      {parseInt(restockQuantity, 10) > 0 && (
+                        <span className="text-[11px] font-semibold text-muted-foreground">
+                          New: <strong className="text-emerald-600 font-bold">{restockProduct.stock + (parseInt(restockQuantity, 10) || 0)}</strong>
+                        </span>
+                      )}
+                    </div>
+                    <input
+                      type="number"
+                      value={restockQuantity}
+                      onChange={e => handleRestockQuantityChange(e.target.value)}
+                      placeholder="0"
+                      min="1"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 font-medium"
+                    />
+                  </div>
                 </div>
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>{restockMode === "add" ? "Adding:" : "Stock Adjustment:"}</span>
-                  <span className="font-semibold text-emerald-500" style={{ fontFamily: "'DM Mono', monospace" }}>
-                    {restockMode === "add" ? `+${parsedAmt}` : `${calculatedTotal - currentStock >= 0 ? `+${calculatedTotal - currentStock}` : calculatedTotal - currentStock}`} units
-                  </span>
+
+                <div className="grid grid-cols-2 gap-3 pt-1 border-t border-border/60">
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-semibold text-foreground">Markup (%)</label>
+                      <span className="text-[11px] text-muted-foreground">Quick presets:</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="number"
+                        step="0.5"
+                        value={restockMarkup}
+                        onChange={e => handleRestockMarkupChange(e.target.value)}
+                        placeholder="10"
+                        className="w-16 px-2.5 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 text-center font-bold"
+                      />
+                      <div className="flex items-center gap-1 flex-1 overflow-x-auto py-0.5">
+                        {[5, 10, 15, 20, 25].map(pct => (
+                          <button
+                            key={pct}
+                            type="button"
+                            onClick={() => handleRestockMarkupPreset(pct)}
+                            className={`px-1.5 py-1 rounded-md text-[11px] font-bold transition-all ${
+                              parseFloat(restockMarkup) === pct
+                                ? "bg-emerald-600 text-white shadow-xs"
+                                : "bg-background border border-border hover:bg-muted text-foreground"
+                            }`}
+                          >
+                            +{pct}%
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-bold text-foreground flex items-center gap-1">
+                        Selling Price (₱) <span className="text-emerald-600 dark:text-emerald-400 text-[10px] font-bold uppercase tracking-wider">(EACH / UNIT)</span>
+                      </label>
+                    </div>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={restockSellingPrice}
+                      onChange={e => handleRestockSellingPriceChange(e.target.value)}
+                      placeholder="0.00"
+                      min="0"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-emerald-500/40 bg-emerald-500/5 text-sm font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                    />
+                  </div>
                 </div>
-                <div className="pt-1.5 border-t border-emerald-500/20 flex justify-between items-center">
-                  <span className="text-xs font-extrabold text-foreground">New Total Stock:</span>
-                  <span className="text-base font-extrabold text-emerald-500" style={{ fontFamily: "'DM Mono', monospace" }}>
-                    {Math.max(0, calculatedTotal)} units
-                  </span>
-                </div>
+
+                {(() => {
+                  const cost = parseFloat(restockCostPrice);
+                  const qty = parseInt(restockQuantity, 10) || 1;
+                  const sell = parseFloat(restockSellingPrice);
+                  if (cost > 0 && sell > 0) {
+                    const unitCost = qty > 0 ? cost / qty : cost;
+                    const profitPerUnit = sell - unitCost;
+                    const totalProfit = profitPerUnit * qty;
+                    const markupPct = unitCost > 0 ? ((profitPerUnit / unitCost) * 100).toFixed(1) : "0";
+                    return (
+                      <div className="flex items-center justify-between text-xs px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 font-medium">
+                        <span>Profit: <strong className="font-bold">+{peso(profitPerUnit)} each</strong> ({markupPct}%)</span>
+                        <span className="text-[11px] opacity-90">Total profit: <strong className="font-bold">+{peso(totalProfit)}</strong> ({qty} units)</span>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
 
               {/* Error Message */}
@@ -3365,7 +3496,7 @@ function InventoryPage({ products, categories = CATEGORIES, catMeta = CAT_META }
               <button
                 type="button"
                 onClick={handleConfirmRestock}
-                disabled={isSubmitting || isNaN(calculatedTotal) || calculatedTotal < 0}
+                disabled={isSubmitting || !restockQuantity || parseInt(restockQuantity, 10) <= 0 || !restockSellingPrice || parseFloat(restockSellingPrice) < 0}
                 className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition-all shadow-md shadow-emerald-500/20 disabled:opacity-50 flex items-center justify-center gap-1.5"
               >
                 {isSubmitting ? (
@@ -4476,6 +4607,7 @@ function POSPage({ products, categories = CATEGORIES }: { products: Product[]; c
   const [showReceipt, setShowReceipt] = useState(false);
   const [completedTrx, setCompletedTrx] = useState<Transaction | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [showReturnModal, setShowReturnModal] = useState(false);
 
   // Discount states (Senior Citizen / PWD)
   const [discountType, setDiscountType] = useState<"None" | "Senior Citizen" | "PWD">("None");
@@ -4713,8 +4845,21 @@ function POSPage({ products, categories = CATEGORIES }: { products: Product[]; c
       {/* Cart panel */}
       <div className="w-80 xl:w-96 flex flex-col bg-card shrink-0">
         <div className="px-4 py-3.5 border-b border-border shrink-0">
-          <h3 className="font-extrabold text-foreground">Current Order</h3>
-          <p className="text-xs text-muted-foreground">{cart.reduce((s, i) => s + i.qty, 0)} item(s)</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-extrabold text-foreground">Current Order</h3>
+              <p className="text-xs text-muted-foreground">{cart.reduce((s, i) => s + i.qty, 0)} item(s)</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowReturnModal(true)}
+              className="px-2.5 py-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+              title="Process product return & choose replacement item from store inventory"
+            >
+              <RotateCcw size={13} />
+              <span>Replace Item</span>
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto scrollbar-hide p-3 space-y-2">
@@ -5128,6 +5273,17 @@ function POSPage({ products, categories = CATEGORIES }: { products: Product[]; c
             </div>
           </div>
         </div>
+      )}
+
+      {showReturnModal && (
+        <RequestReturnModal
+          availableProducts={products as any}
+          onClose={() => setShowReturnModal(false)}
+          onSuccess={async () => {
+            setShowReturnModal(false);
+            await refreshData();
+          }}
+        />
       )}
     </div>
   );
@@ -8169,6 +8325,7 @@ function StaffLayout({ onLogout }: { onLogout: () => void }) {
     switch (page) {
       case "dashboard": return <StaffDashboard onNavigate={p => setPage(p)} products={products} />;
       case "pos": return <POSPage products={products} categories={categories} />;
+      case "inventory": return <InventoryPage products={products} categories={categories} catMeta={CAT_META} />;
       case "transactions": return <TransactionsPage />;
       case "returns": return <ReturnsManagement role="staff" onReturnsUpdated={handleReturnsUpdated} />;
       case "profile": return <StaffProfile />;
@@ -8190,7 +8347,7 @@ function StaffLayout({ onLogout }: { onLogout: () => void }) {
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <header className="h-14 border-b border-border bg-card/80 backdrop-blur-md flex items-center justify-between px-5 shrink-0 transition-colors">
           <div className="flex items-center gap-2.5">
-            <span className="text-sm font-extrabold text-foreground">{page === "pos" ? "Point of Sale" : page === "transactions" ? "Today's Transactions" : page === "returns" ? "Product Returns" : page === "profile" ? "My Profile" : "Staff Dashboard"}</span>
+            <span className="text-sm font-extrabold text-foreground">{page === "pos" ? "Point of Sale" : page === "inventory" ? "Inventory" : page === "transactions" ? "Today's Transactions" : page === "returns" ? "Product Returns" : page === "profile" ? "My Profile" : "Staff Dashboard"}</span>
           </div>
           <div className="flex items-center gap-3">
             <ThemeToggle />

@@ -1,10 +1,19 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   X, RotateCcw, AlertTriangle, CheckCircle2, ChevronRight, Package,
-  FileText, ArrowRight, ShieldAlert, ShoppingBag, User, Search, XCircle, Clock
+  FileText, ArrowRight, ShieldAlert, ShoppingBag, User, Search, XCircle, Clock,
+  DollarSign
 } from "lucide-react";
 import { toast } from "sonner";
-import { api, ReturnableItem, ReturnableItemsResponse, TransactionItem, notifyStockOrDataChanged } from "../../../api";
+import {
+  api,
+  ReturnableItem,
+  ReturnableItemsResponse,
+  TransactionItem,
+  ProductItem,
+  CreateReturnPayload,
+  notifyStockOrDataChanged
+} from "../../../api";
 
 interface RequestReturnModalProps {
   transactionId?: number | null;
@@ -12,6 +21,7 @@ interface RequestReturnModalProps {
   onClose: () => void;
   onSuccess: () => void;
   customerTransactions?: TransactionItem[];
+  availableProducts?: ProductItem[];
 }
 
 const RETURN_REASONS = [
@@ -33,12 +43,17 @@ export default function RequestReturnModal({
   customerName,
   onClose,
   onSuccess,
-  customerTransactions = []
+  customerTransactions = [],
+  availableProducts
 }: RequestReturnModalProps) {
   const [selectedTxId, setSelectedTxId] = useState<number | null>(initialTxId || null);
   const [data, setData] = useState<ReturnableItemsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Transactions list for receipt lookup
+  const [recentTransactions, setRecentTransactions] = useState<TransactionItem[]>(customerTransactions);
+  const [receiptSearchQuery, setReceiptSearchQuery] = useState("");
 
   // Selected items to return: map of transaction_item_id -> return quantity
   const [selectedQuantities, setSelectedQuantities] = useState<Record<number, number>>({});
@@ -48,12 +63,56 @@ export default function RequestReturnModal({
   const [itemFilter, setItemFilter] = useState<string>("");
   const [submittingAction, setSubmittingAction] = useState<"Completed" | "Rejected" | null>(null);
 
-  // If no initialTxId, and customer has transactions, preselect first one
+  // POS Store Products for replacement selection
+  const [storeProducts, setStoreProducts] = useState<ProductItem[]>(availableProducts || []);
+  const [loadingProducts, setLoadingProducts] = useState(false);
+  const [posSearch, setPosSearch] = useState("");
+  const [posCategory, setPosCategory] = useState("All");
+  const [selectedReplacementProduct, setSelectedReplacementProduct] = useState<ProductItem | null>(null);
+  const [replacementQty, setReplacementQty] = useState<number>(1);
+  const [cashTendered, setCashTendered] = useState<string>("");
+
+  // Load store products if not passed via props
   useEffect(() => {
-    if (!initialTxId && customerTransactions.length > 0 && selectedTxId === null) {
-      setSelectedTxId(customerTransactions[0].id);
+    if (availableProducts && availableProducts.length > 0) {
+      setStoreProducts(availableProducts);
+      return;
     }
-  }, [initialTxId, customerTransactions, selectedTxId]);
+    setLoadingProducts(true);
+    api.products.getAll()
+      .then(prods => setStoreProducts(prods || []))
+      .catch(err => console.error("Failed to load POS products:", err))
+      .finally(() => setLoadingProducts(false));
+  }, [availableProducts]);
+
+  // Load recent transactions if not passed
+  useEffect(() => {
+    if (customerTransactions && customerTransactions.length > 0) {
+      setRecentTransactions(customerTransactions);
+      if (!selectedTxId && !initialTxId) {
+        setSelectedTxId(customerTransactions[0].id);
+      }
+      return;
+    }
+
+    api.transactions.getAll()
+      .then(txs => {
+        setRecentTransactions(txs || []);
+        if (!selectedTxId && !initialTxId && txs && txs.length > 0) {
+          setSelectedTxId(txs[0].id);
+        }
+      })
+      .catch(err => console.error("Failed to load transactions for return:", err));
+  }, [customerTransactions, initialTxId, selectedTxId]);
+
+  // Categories from store products
+  const productCategories = useMemo(() => {
+    const set = new Set<string>();
+    storeProducts.forEach(p => {
+      if (p.category) set.add(p.category);
+    });
+    return ["All", ...Array.from(set)];
+  }, [storeProducts]);
 
   // Fetch returnable items whenever selectedTxId changes
   useEffect(() => {
@@ -63,6 +122,8 @@ export default function RequestReturnModal({
     setLoading(true);
     setError(null);
     setSelectedQuantities({});
+    setSelectedReplacementProduct(null);
+    setCashTendered("");
 
     api.returns.getReturnableItems(selectedTxId)
       .then(res => {
@@ -124,6 +185,53 @@ export default function RequestReturnModal({
   }, 0);
   const totalItemsCount = Object.values(selectedQuantities).reduce((a, b) => a + b, 0);
 
+  // Auto-suggest default replacement product (exact match or first eligible)
+  useEffect(() => {
+    if (!selectedReplacementProduct && selectedItemsList.length > 0 && storeProducts.length > 0) {
+      const firstReturned = selectedItemsList[0];
+      // Try exact same product first if price >= totalRefund
+      const same = storeProducts.find(p => p.id === firstReturned.product_id && Number(p.price) >= totalRefund && p.stock > 0);
+      if (same) {
+        setSelectedReplacementProduct(same);
+      } else {
+        const eligible = storeProducts.find(p => Number(p.price) >= totalRefund && p.stock > 0);
+        if (eligible) {
+          setSelectedReplacementProduct(eligible);
+        }
+      }
+    }
+  }, [selectedItemsList, storeProducts, totalRefund, selectedReplacementProduct]);
+
+  // Calculations for replacement pricing & customer cash addition
+  const replacementUnitPrice = selectedReplacementProduct ? Number(selectedReplacementProduct.price) : 0;
+  const replacementTotal = replacementUnitPrice * replacementQty;
+  const additionalCashRequired = Math.max(0, replacementTotal - totalRefund);
+  const cashGiven = parseFloat(cashTendered) || 0;
+  const changeDue = Math.max(0, cashGiven - additionalCashRequired);
+  const isCashInsufficient = additionalCashRequired > 0 && cashGiven < additionalCashRequired;
+
+  // Filter products in POS replacement picker
+  const filteredReplacementProducts = useMemo(() => {
+    return storeProducts.filter(p => {
+      const q = posSearch.toLowerCase();
+      const matchesSearch = p.name.toLowerCase().includes(q) ||
+                            (p.category && p.category.toLowerCase().includes(q));
+      const matchesCategory = posCategory === "All" || p.category === posCategory;
+      return matchesSearch && matchesCategory && p.stock > 0;
+    });
+  }, [storeProducts, posSearch, posCategory]);
+
+  // Filter transactions for receipt lookup
+  const filteredTransactions = useMemo(() => {
+    if (!receiptSearchQuery.trim()) return recentTransactions;
+    const q = receiptSearchQuery.toLowerCase();
+    return recentTransactions.filter(t =>
+      (t.receipt_no && t.receipt_no.toLowerCase().includes(q)) ||
+      (t.customer && t.customer.toLowerCase().includes(q)) ||
+      ((t as any).customer_name && (t as any).customer_name.toLowerCase().includes(q))
+    );
+  }, [recentTransactions, receiptSearchQuery]);
+
   const handleSubmitAction = async (targetStatus: "Completed" | "Rejected") => {
     if (!selectedTxId) {
       toast.error("Please select a purchase transaction");
@@ -135,14 +243,32 @@ export default function RequestReturnModal({
       return;
     }
 
-    if (targetStatus === "Rejected" && !decisionNotes.trim()) {
-      toast.error("Please provide decision notes or a reason when rejecting a return");
-      return;
+    if (targetStatus === "Rejected") {
+      if (!decisionNotes.trim()) {
+        toast.error("Please provide decision notes or a reason when rejecting a return");
+        return;
+      }
+    } else {
+      // Validate replacement item for Completed status
+      if (!selectedReplacementProduct) {
+        toast.error(`Please select a replacement item from the POS catalog (minimum value: ${peso(totalRefund)})`);
+        return;
+      }
+
+      if (replacementTotal < totalRefund) {
+        toast.error(`Replacement item price (${peso(replacementTotal)}) cannot be lower than the return credit (${peso(totalRefund)}). Customer must pick an item worth at least ${peso(totalRefund)}.`);
+        return;
+      }
+
+      if (additionalCashRequired > 0 && cashGiven < additionalCashRequired) {
+        toast.error(`Customer has not tendered enough cash. Short by ${peso(additionalCashRequired - cashGiven)}.`);
+        return;
+      }
     }
 
     setSubmittingAction(targetStatus);
     try {
-      const payload = {
+      const payload: CreateReturnPayload = {
         transaction_id: selectedTxId,
         reason,
         admin_notes: decisionNotes.trim() || undefined,
@@ -151,11 +277,18 @@ export default function RequestReturnModal({
         items: selectedItemsList.map(item => ({
           transaction_item_id: item.transaction_item_id,
           quantity: selectedQuantities[item.transaction_item_id]
-        }))
+        })),
+        replacement_item: (targetStatus === "Completed" && selectedReplacementProduct) ? {
+          product_id: selectedReplacementProduct.id,
+          product_name: selectedReplacementProduct.name,
+          quantity: replacementQty,
+          unit_price: replacementUnitPrice,
+          additional_amount_paid: additionalCashRequired
+        } : undefined
       };
 
       const res = await api.returns.create(payload);
-      toast.success(res.message || (targetStatus === "Rejected" ? "Return rejected successfully" : "Walk-in return approved & refund completed successfully!"));
+      toast.success(res.message || (targetStatus === "Rejected" ? "Return rejected successfully" : "Walk-in return approved & item replacement completed successfully!"));
       notifyStockOrDataChanged();
       onSuccess();
       onClose();
@@ -170,7 +303,8 @@ export default function RequestReturnModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/70 backdrop-blur-sm animate-in fade-in">
-      <div className="relative w-full max-w-3xl bg-card rounded-3xl border border-border shadow-2xl overflow-hidden flex flex-col max-h-[90vh] text-foreground">
+      <div className="relative w-full max-w-3xl bg-card rounded-3xl border border-border shadow-2xl overflow-hidden flex flex-col max-h-[92vh] text-foreground">
+        
         {/* Header */}
         <div className="px-6 py-5 bg-gradient-to-r from-emerald-600 to-teal-700 text-white flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
@@ -178,9 +312,9 @@ export default function RequestReturnModal({
               <RotateCcw size={22} className="text-white" />
             </div>
             <div>
-              <h2 className="text-lg font-extrabold leading-tight">Process Walk-In Return</h2>
+              <h2 className="text-lg font-extrabold leading-tight">Process Walk-In Return &amp; Replacement</h2>
               <p className="text-xs text-emerald-100">
-                {displayCustomerName ? `Customer: ${displayCustomerName} · Verify receipt and items` : "Verify customer receipt and select items to return"}
+                {displayCustomerName ? `Customer: ${displayCustomerName} · Choose replacement item for customer` : "Verify customer receipt and choose replacement item from store inventory"}
               </p>
             </div>
           </div>
@@ -194,20 +328,39 @@ export default function RequestReturnModal({
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* Transaction Picker (if opened without a specific transaction) */}
-          {!initialTxId && customerTransactions.length > 0 && (
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">
-                Select Purchase Transaction / Receipt
-              </label>
+          {/* Transaction Picker & Search */}
+          {!initialTxId && (
+            <div className="p-4 rounded-2xl bg-muted/30 border border-border space-y-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <FileText size={14} className="text-emerald-500" /> Select Customer Purchase Receipt
+                </label>
+                <span className="text-[11px] text-muted-foreground">
+                  {filteredTransactions.length} receipt(s) available
+                </span>
+              </div>
+
+              {recentTransactions.length > 5 && (
+                <div className="relative">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    type="text"
+                    value={receiptSearchQuery}
+                    onChange={e => setReceiptSearchQuery(e.target.value)}
+                    placeholder="Search receipt number (e.g. TRX-2026-0001)..."
+                    className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  />
+                </div>
+              )}
+
               <select
                 value={selectedTxId || ""}
                 onChange={e => setSelectedTxId(Number(e.target.value))}
-                className="w-full px-4 py-2.5 rounded-xl border border-border bg-muted/60 text-sm font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                className="w-full px-4 py-2.5 rounded-xl border border-border bg-card text-sm font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
               >
-                {customerTransactions.map(t => (
+                {filteredTransactions.map(t => (
                   <option key={t.id} value={t.id}>
-                    {t.receipt_no} — {t.date} — {peso(Number(t.total_amount))}
+                    {t.receipt_no} — {t.date} — {peso(Number(t.total_amount))} {t.customer ? `(${t.customer})` : ""}
                   </option>
                 ))}
               </select>
@@ -232,7 +385,7 @@ export default function RequestReturnModal({
                   <span className="text-muted-foreground block">Cashier</span>
                   <span className="font-semibold text-foreground flex items-center gap-1">
                     <User size={12} className="text-muted-foreground" />
-                    {data.transaction.cashier_name || customerTransactions.find(t => t.id === selectedTxId)?.cashier || "Cashier"}
+                    {data.transaction.cashier_name || recentTransactions.find(t => t.id === selectedTxId)?.cashier || "Cashier"}
                   </span>
                 </div>
                 <div>
@@ -274,7 +427,7 @@ export default function RequestReturnModal({
             </div>
           ) : data && (
             <>
-              {/* Items Section */}
+              {/* ─── Step 1: Select Items Being Returned ─── */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
@@ -282,7 +435,7 @@ export default function RequestReturnModal({
                       ? "Receipt Items (Non-Returnable)"
                       : isAllAlreadyReturned
                         ? "Transaction Items Status"
-                        : "Select Items to Return"}
+                        : "1. Select Item(s) Being Returned by Customer"}
                   </label>
                   {!isWindowExpired && !isAllAlreadyReturned && (
                     <span className="text-xs text-muted-foreground">
@@ -291,188 +444,329 @@ export default function RequestReturnModal({
                   )}
                 </div>
 
-                {/* Case 0: Return window expired (> 24 hours) */}
                 {isWindowExpired ? (
                   <div className="space-y-3">
                     <div className="border border-border rounded-2xl overflow-hidden divide-y divide-border bg-muted/40">
                       {allItems.map(item => (
                         <div key={item.transaction_item_id} className="p-3.5 flex items-center justify-between gap-3 text-xs">
                           <div>
-                            <p className="font-bold text-foreground">{item.product_name}</p>
+                            <p className="font-extrabold text-foreground text-sm">{item.product_name}</p>
                             <p className="text-muted-foreground mt-0.5">
-                              Purchased: {item.purchased_quantity} · {peso(Number(item.unit_price))} each
+                              {item.purchased_quantity} unit(s) purchased @ {peso(Number(item.unit_price))}
                             </p>
                           </div>
-                          <span className="px-2.5 py-1 rounded-full bg-muted text-muted-foreground font-medium text-[11px] border border-border flex items-center gap-1 shrink-0">
-                            <Clock size={12} className="text-muted-foreground" /> Non-returnable
+                          <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-muted text-muted-foreground border border-border">
+                            Expired
                           </span>
                         </div>
                       ))}
                     </div>
                   </div>
                 ) : isAllAlreadyReturned ? (
-                  /* Case 1: All items are already returned */
-                  <div className="space-y-3">
-                    <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 flex items-start gap-3">
-                      <AlertTriangle size={20} className="text-amber-500 shrink-0 mt-0.5" />
-                      <div>
-                        <p className="text-sm font-extrabold uppercase tracking-wide flex items-center gap-1.5">
-                          Already Returned
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                          All items on this receipt have already been returned. The return button is no longer needed as there are no returnable items remaining.
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Non-selectable list of already returned items */}
-                    <div className="border border-border rounded-2xl overflow-hidden divide-y divide-border bg-muted/40">
-                      {alreadyReturnedItems.map(item => (
-                        <div key={item.transaction_item_id} className="p-3.5 flex items-center justify-between gap-3 text-xs">
-                          <div>
-                            <p className="font-bold text-foreground">{item.product_name}</p>
-                            <p className="text-muted-foreground mt-0.5">
-                              Purchased: {item.purchased_quantity} · {peso(Number(item.unit_price))} each
-                            </p>
-                          </div>
-                          <span className="px-2.5 py-1 rounded-full bg-muted text-muted-foreground font-bold text-[11px] border border-border flex items-center gap-1 shrink-0">
-                            <CheckCircle2 size={12} className="text-muted-foreground" /> Already Returned
-                          </span>
-                        </div>
-                      ))}
-                    </div>
+                  <div className="p-4 rounded-2xl bg-muted/40 border border-border text-center space-y-1">
+                    <CheckCircle2 size={24} className="text-emerald-500 mx-auto" />
+                    <p className="text-sm font-bold text-foreground">All items from this receipt have already been returned / replaced</p>
                   </div>
                 ) : (
-                  /* Case 2: There are returnable items */
-                  <>
-                    {/* Notice for any already returned items that are excluded */}
-                    {alreadyReturnedItems.length > 0 && (
-                      <div className="p-3 rounded-2xl bg-muted/40 border border-border flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-                        <div className="flex items-center gap-2 text-foreground">
-                          <CheckCircle2 size={14} className="text-emerald-500 shrink-0" />
-                          <span>
-                            <strong className="text-foreground">Already Returned:</strong>{" "}
-                            {alreadyReturnedItems.map(i => `${i.product_name} (×${i.already_returned || i.purchased_quantity})`).join(", ")}
-                          </span>
-                        </div>
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground bg-muted px-2 py-0.5 rounded-md shrink-0 self-start sm:self-auto border border-border">
-                          Already Returned · Excluded
-                        </span>
-                      </div>
-                    )}
+                  <div className="border border-border rounded-2xl overflow-hidden divide-y divide-border bg-card">
+                    {returnableItems.map(item => {
+                      const isSelected = selectedQuantities[item.transaction_item_id] !== undefined;
+                      const currentQty = selectedQuantities[item.transaction_item_id] || 1;
 
-                    {returnableItems.length > 3 && (
-                      <div className="relative mb-2.5">
-                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                        <input
-                          type="text"
-                          value={itemFilter}
-                          onChange={e => setItemFilter(e.target.value)}
-                          placeholder="Filter eligible items on this receipt..."
-                          className="w-full pl-8 pr-7 py-2 text-xs rounded-xl bg-muted/60 border border-border text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
-                        />
-                        {itemFilter && (
-                          <button
-                            type="button"
-                            onClick={() => setItemFilter("")}
-                            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-0.5 rounded-full hover:bg-muted transition-colors"
-                          >
-                            <X size={12} />
-                          </button>
-                        )}
-                      </div>
-                    )}
-
-                    <div className="space-y-2.5">
-                      {returnableItems
-                        .filter(item => !itemFilter.trim() || item.product_name.toLowerCase().includes(itemFilter.toLowerCase().trim()))
-                        .map(item => {
-                          const isSelected = selectedQuantities[item.transaction_item_id] !== undefined;
-                          const returnQty = selectedQuantities[item.transaction_item_id] || 1;
-
-                          return (
-                            <div
-                              key={item.transaction_item_id}
-                              className={`p-3.5 rounded-2xl border transition-all ${
-                                isSelected
-                                  ? "bg-emerald-500/10 border-emerald-500/40 shadow-sm"
-                                  : "bg-card border-border hover:border-border/80"
-                              }`}
-                            >
-                              <div className="flex items-center justify-between gap-3">
-                                <label className="flex items-center gap-3 cursor-pointer flex-1 min-w-0">
-                                  <input
-                                    type="checkbox"
-                                    checked={isSelected}
-                                    onChange={() => toggleItemSelection(item)}
-                                    className="w-4 h-4 rounded text-emerald-600 border-border focus:ring-emerald-500 cursor-pointer"
-                                  />
-                                  <div className="min-w-0">
-                                    <p className="text-sm font-extrabold text-foreground truncate">
-                                      {item.product_name}
-                                    </p>
-                                    <p className="text-xs text-muted-foreground">
-                                      {peso(Number(item.unit_price))} each
-                                      {item.current_stock !== undefined && (
-                                        <span className="text-muted-foreground font-mono ml-1.5">
-                                          (Current store stock: {item.current_stock})
-                                        </span>
-                                      )}
-                                      {" "}· Eligible to return: <span className="font-bold text-foreground">{item.available_quantity}</span> of {item.purchased_quantity}
-                                      {item.already_returned > 0 && (
-                                        <span className="text-amber-500 ml-1.5 font-medium">
-                                          ({item.already_returned} already returned)
-                                        </span>
-                                      )}
-                                    </p>
-                                  </div>
-                                </label>
-
-                                {/* Quantity Controls (if selected) */}
-                                {isSelected && (
-                                  <div className="flex items-center gap-2 shrink-0">
-                                    <span className="text-xs text-muted-foreground font-semibold">Qty:</span>
-                                    <div className="flex items-center border border-border rounded-xl bg-card overflow-hidden shadow-xs">
-                                      <button
-                                        type="button"
-                                        onClick={() => setItemQuantity(item, returnQty - 1)}
-                                        disabled={returnQty <= 1}
-                                        className="px-2.5 py-1 text-foreground hover:bg-muted disabled:opacity-30 text-xs font-bold cursor-pointer"
-                                      >
-                                        -
-                                      </button>
-                                      <span className="px-2 text-xs font-extrabold text-foreground font-mono min-w-[24px] text-center">
-                                        {returnQty}
-                                      </span>
-                                      <button
-                                        type="button"
-                                        onClick={() => setItemQuantity(item, returnQty + 1)}
-                                        disabled={returnQty >= item.available_quantity}
-                                        className="px-2.5 py-1 text-foreground hover:bg-muted disabled:opacity-30 text-xs font-bold cursor-pointer"
-                                      >
-                                        +
-                                      </button>
-                                    </div>
-                                    <span className="text-xs font-extrabold text-emerald-500 font-mono min-w-[70px] text-right">
-                                      {peso(Number(item.unit_price) * returnQty)}
-                                    </span>
-                                  </div>
-                                )}
+                      return (
+                        <div
+                          key={item.transaction_item_id}
+                          className={`p-4 transition-colors ${isSelected ? "bg-emerald-500/5" : "hover:bg-muted/40"}`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <label className="flex items-start gap-3 cursor-pointer select-none flex-1">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => toggleItemSelection(item)}
+                                className="w-4 h-4 mt-1 rounded text-emerald-600 border-border focus:ring-emerald-500 cursor-pointer"
+                              />
+                              <div>
+                                <p className="font-extrabold text-foreground text-sm">{item.product_name}</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">
+                                  Purchased: {item.purchased_quantity} unit(s) @ {peso(Number(item.unit_price))} · Returnable: {item.available_quantity}
+                                </p>
                               </div>
-                            </div>
-                          );
-                        })}
-                    </div>
-                  </>
+                            </label>
+
+                            {isSelected && (
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className="text-xs text-muted-foreground font-semibold">Qty:</span>
+                                <div className="flex items-center border border-border rounded-xl bg-background overflow-hidden">
+                                  <button
+                                    type="button"
+                                    onClick={() => setItemQuantity(item, currentQty - 1)}
+                                    disabled={currentQty <= 1}
+                                    className="px-2.5 py-1 text-xs font-extrabold text-foreground hover:bg-muted disabled:opacity-40 cursor-pointer"
+                                  >
+                                    −
+                                  </button>
+                                  <span className="px-3 py-1 text-xs font-mono font-extrabold text-foreground">
+                                    {currentQty}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setItemQuantity(item, currentQty + 1)}
+                                    disabled={currentQty >= item.available_quantity}
+                                    className="px-2.5 py-1 text-xs font-extrabold text-foreground hover:bg-muted disabled:opacity-40 cursor-pointer"
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                                <span className="text-sm font-extrabold font-mono text-emerald-500 ml-1">
+                                  {peso(Number(item.unit_price) * currentQty)}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
 
-              {/* Reason & Notes (only needed when there are returnable items) */}
-              {!isAllAlreadyReturned && (
+              {/* ─── Step 2: Choose Replacement Item in POS Catalog ─── */}
+              {!isWindowExpired && !isAllAlreadyReturned && selectedItemsList.length > 0 && (
+                <div className="space-y-3 pt-2 border-t border-border/80">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                        <ShoppingBag size={14} className="text-emerald-500" /> 2. Choose Replacement Item for Customer (POS Catalog)
+                      </label>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Customer return credit limit: <strong className="text-emerald-500 font-mono">{peso(totalRefund)}</strong>. Customer can pick any item valued at <strong className="text-foreground">{peso(totalRefund)} or higher</strong>. If higher, customer adds money.
+                      </p>
+                    </div>
+                    {selectedReplacementProduct && (
+                      <span className="text-xs font-extrabold px-3 py-1 rounded-xl bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 whitespace-nowrap">
+                        ✓ {selectedReplacementProduct.name}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Search and Categories */}
+                  <div className="p-3 rounded-2xl bg-muted/40 border border-border space-y-2.5">
+                    <div className="relative">
+                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                      <input
+                        type="text"
+                        value={posSearch}
+                        onChange={e => setPosSearch(e.target.value)}
+                        placeholder="Search POS products by name or category..."
+                        className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                      />
+                    </div>
+                    <div className="flex gap-1.5 overflow-x-auto scrollbar-hide pb-0.5">
+                      {productCategories.map(cat => (
+                        <button
+                          key={cat}
+                          type="button"
+                          onClick={() => setPosCategory(cat)}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition-colors cursor-pointer ${
+                            posCategory === cat
+                              ? "bg-emerald-600 text-white"
+                              : "bg-muted text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          {cat}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Products Selection Grid */}
+                  {loadingProducts ? (
+                    <div className="py-8 flex justify-center text-muted-foreground">
+                      <RotateCcw size={20} className="animate-spin text-emerald-500" />
+                    </div>
+                  ) : filteredReplacementProducts.length === 0 ? (
+                    <div className="p-4 rounded-xl bg-muted/30 border border-border text-center text-xs text-muted-foreground">
+                      No matching products found in POS inventory.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 max-h-56 overflow-y-auto p-1 border border-border rounded-2xl bg-card">
+                      {filteredReplacementProducts.map(prod => {
+                        const prodPrice = Number(prod.price);
+                        const isEligible = prodPrice >= totalRefund;
+                        const isSelected = selectedReplacementProduct?.id === prod.id;
+                        const diff = prodPrice - totalRefund;
+
+                        return (
+                          <div
+                            key={prod.id}
+                            onClick={() => {
+                              if (isEligible) {
+                                setSelectedReplacementProduct(prod);
+                                setCashTendered("");
+                              } else {
+                                toast.error(`"${prod.name}" costs ${peso(prodPrice)}, which is below the return credit (${peso(totalRefund)}). The customer must pick an item worth at least ${peso(totalRefund)}.`);
+                              }
+                            }}
+                            className={`p-3 rounded-xl border text-xs transition-all relative cursor-pointer ${
+                              !isEligible
+                                ? "opacity-45 bg-muted/30 border-border/60 cursor-not-allowed"
+                                : isSelected
+                                ? "border-emerald-500 bg-emerald-500/10 ring-2 ring-emerald-500/30 shadow-xs"
+                                : "border-border hover:border-emerald-500/50 hover:bg-muted/40 bg-card"
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-1.5">
+                              <div className="min-w-0 flex-1">
+                                <p className="font-bold text-foreground text-xs truncate" title={prod.name}>
+                                  {prod.name}
+                                </p>
+                                <p className="text-[10px] text-muted-foreground mt-0.5">
+                                  {prod.category} • {prod.stock} in stock
+                                </p>
+                              </div>
+                              <span className="font-extrabold text-foreground font-mono shrink-0">
+                                {peso(prodPrice)}
+                              </span>
+                            </div>
+
+                            <div className="mt-2.5 flex items-center justify-between text-[10px]">
+                              {!isEligible ? (
+                                <span className="text-red-500 font-bold bg-red-500/10 px-1.5 py-0.5 rounded border border-red-500/20">
+                                  Below Min ({peso(totalRefund)})
+                                </span>
+                              ) : diff === 0 ? (
+                                <span className="text-emerald-500 font-bold bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                                  Exact Match (₱0.00 add)
+                                </span>
+                              ) : (
+                                <span className="text-purple-600 dark:text-purple-400 font-bold bg-purple-500/10 px-1.5 py-0.5 rounded border border-purple-500/20">
+                                  +{peso(diff)} Customer Adds
+                                </span>
+                              )}
+                              {isSelected && (
+                                <span className="text-emerald-500 font-extrabold flex items-center gap-0.5">
+                                  <CheckCircle2 size={12} /> Picked
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Replacement Calculation & Additional Payment Card */}
+                  {selectedReplacementProduct && (
+                    <div className={`p-4 rounded-2xl border space-y-3 ${
+                      additionalCashRequired > 0
+                        ? "bg-purple-500/10 border-purple-500/30 text-purple-900 dark:text-purple-100"
+                        : "bg-emerald-500/10 border-emerald-500/30 text-emerald-900 dark:text-emerald-100"
+                    }`}>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/50 pb-2.5">
+                        <div>
+                          <span className="text-[11px] font-bold uppercase tracking-wider block">
+                            Replacement Item Chosen
+                          </span>
+                          <p className="text-sm font-extrabold text-foreground mt-0.5">
+                            {replacementQty}× {selectedReplacementProduct.name} ({peso(replacementUnitPrice)})
+                          </p>
+                        </div>
+                        <div className="text-left sm:text-right">
+                          <span className="text-[11px] text-muted-foreground block">Customer Return Credit</span>
+                          <span className="font-extrabold font-mono text-emerald-500 text-sm">
+                            −{peso(totalRefund)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {additionalCashRequired === 0 ? (
+                        <div className="flex items-center justify-between text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                          <span className="flex items-center gap-1.5">
+                            <CheckCircle2 size={16} /> Exact Price Match
+                          </span>
+                          <span>Additional cash to pay: ₱0.00 (Even Exchange)</span>
+                        </div>
+                      ) : (
+                        <div className="space-y-2.5">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5 text-xs font-bold text-purple-700 dark:text-purple-300">
+                              <AlertTriangle size={15} className="text-purple-500 shrink-0" />
+                              <span>Customer chose higher-value item ({selectedReplacementProduct.name}):</span>
+                            </div>
+                            <div className="text-right">
+                              <span className="text-[10px] text-muted-foreground block uppercase font-bold">Customer Must Add Money</span>
+                              <span className="text-base font-extrabold text-purple-600 dark:text-purple-400 font-mono">
+                                +{peso(additionalCashRequired)}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Cash Tendered Input */}
+                          <div className="p-3 rounded-xl bg-card border border-border space-y-2">
+                            <div className="flex items-center justify-between gap-3 flex-wrap">
+                              <label className="text-xs font-bold text-foreground">
+                                Cash Tendered by Customer (₱):
+                              </label>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="number"
+                                  step="any"
+                                  min={additionalCashRequired}
+                                  value={cashTendered}
+                                  onChange={e => setCashTendered(e.target.value)}
+                                  placeholder={`Min ${additionalCashRequired.toFixed(2)}`}
+                                  className="w-32 px-3 py-1.5 text-right font-mono font-extrabold text-sm rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setCashTendered(additionalCashRequired.toString())}
+                                  className="px-2 py-1 text-[11px] font-bold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 rounded-lg hover:bg-purple-500/20 transition-colors cursor-pointer"
+                                >
+                                  Exact
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Quick money shortcuts */}
+                            <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                              {[50, 100, 200, 500, 1000].map(amt => (
+                                <button
+                                  key={amt}
+                                  type="button"
+                                  onClick={() => setCashTendered(amt.toString())}
+                                  className="px-2 py-0.5 text-[10px] font-bold bg-muted hover:bg-muted/80 text-foreground border border-border rounded-md cursor-pointer"
+                                >
+                                  ₱{amt}
+                                </button>
+                              ))}
+                            </div>
+
+                            {/* Change calculation */}
+                            <div className="pt-2 border-t border-border/60 flex items-center justify-between text-xs">
+                              <span className="text-muted-foreground font-medium">Customer Change:</span>
+                              <span className={`font-mono font-extrabold ${isCashInsufficient ? "text-red-500" : "text-emerald-500"}`}>
+                                {isCashInsufficient ? (
+                                  `Insufficient (Short by ${peso(additionalCashRequired - cashGiven)})`
+                                ) : (
+                                  peso(changeDue)
+                                )}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ─── Reason, Restock, Notes ─── */}
+              {!isWindowExpired && !isAllAlreadyReturned && selectedItemsList.length > 0 && (
                 <>
-                  <div>
+                  <div className="pt-2 border-t border-border">
                     <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">
-                      Primary Reason for Return *
+                      Reason for Return
                     </label>
                     <select
                       value={reason}
@@ -485,7 +779,7 @@ export default function RequestReturnModal({
                     </select>
                   </div>
 
-                  {/* Restock Option */}
+                  {/* Restock Condition */}
                   <div className="p-3.5 rounded-2xl border border-border bg-card">
                     <label className="flex items-start gap-3 cursor-pointer">
                       <input
@@ -495,31 +789,31 @@ export default function RequestReturnModal({
                         className="w-4 h-4 mt-0.5 rounded text-emerald-600 border-border focus:ring-emerald-500 cursor-pointer"
                       />
                       <div>
-                        <p className="text-xs font-bold text-foreground">Restock item(s) back into store inventory</p>
-                        <p className="text-[11px] text-muted-foreground mt-0.5">Automatically increment the products' stock counts upon approval</p>
+                        <p className="text-xs font-bold text-foreground">Returned item is unopened / resellable condition (Restock)</p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">Check if the returned unit can be placed back into store stock. Leave unchecked if damaged, defective, or spoiled.</p>
                       </div>
                     </label>
                   </div>
 
-                  {/* Store Decision Notes / Feedback */}
+                  {/* Notes */}
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">
-                      Store Decision Notes / Feedback
+                      Staff / Store Notes (Optional)
                     </label>
                     <textarea
                       rows={2}
                       value={decisionNotes}
                       onChange={e => setDecisionNotes(e.target.value)}
-                      placeholder="e.g., Items inspected at counter; refund paid in cash."
+                      placeholder="e.g., Replacement item handed to customer. Additional cash collected."
                       className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-muted/60 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 resize-none placeholder-muted-foreground"
                     />
                   </div>
 
-                  {/* Return Policy Notice */}
+                  {/* Policy reminder */}
                   <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-start gap-3">
                     <ShieldAlert size={18} className="text-amber-500 shrink-0 mt-0.5" />
                     <p className="text-xs text-amber-600 dark:text-amber-400 leading-relaxed">
-                      <strong>Walk-In Verification Notice:</strong> Verify the physical condition of the item and match against the receipt. Choose <strong>Approve &amp; Complete Refund</strong> to immediately finalize the refund and restock inventory, or <strong>Reject Return</strong> if ineligible.
+                      <strong>Store Replacement Policy:</strong> The customer's return credit is limited to the value of the returned item ({peso(totalRefund)}). When choosing a replacement item valued at {peso(totalRefund)}+, collect the additional cash difference from the customer before issuing the replacement.
                     </p>
                   </div>
                 </>
@@ -538,24 +832,30 @@ export default function RequestReturnModal({
                 </span>
                 <span className="text-xs text-muted-foreground">Past 24-hour return policy</span>
               </div>
-            ) : !isAllAlreadyReturned ? (
+            ) : !isAllAlreadyReturned && selectedItemsList.length > 0 ? (
               <>
-                <span className="text-[11px] text-muted-foreground block font-semibold uppercase tracking-wider">Total Estimated Refund</span>
-                <div className="flex items-baseline gap-2">
+                <span className="text-[11px] text-muted-foreground block font-semibold uppercase tracking-wider">
+                  Replacement Value Summary
+                </span>
+                <div className="flex items-baseline gap-2 flex-wrap">
                   <span className="text-xl font-extrabold text-emerald-500 font-mono">
-                    {peso(totalRefund)}
+                    {peso(selectedReplacementProduct ? replacementTotal : totalRefund)}
                   </span>
-                  <span className="text-xs text-muted-foreground font-medium">
-                    ({totalItemsCount} item{totalItemsCount === 1 ? "" : "s"})
-                  </span>
+                  {additionalCashRequired > 0 && (
+                    <span className="text-xs font-extrabold text-purple-600 dark:text-purple-400 bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 rounded-md">
+                      +{peso(additionalCashRequired)} Added by Customer
+                    </span>
+                  )}
                 </div>
+                <span className="text-[10px] text-muted-foreground block font-normal mt-0.5">
+                  Return Credit: {peso(totalRefund)} • {selectedReplacementProduct ? `Replaced with: ${selectedReplacementProduct.name}` : "Select a replacement product"}
+                </span>
               </>
             ) : (
               <div className="flex items-center gap-2">
                 <span className="px-2.5 py-1 rounded-lg bg-muted text-foreground font-bold text-xs flex items-center gap-1.5 border border-border">
-                  <CheckCircle2 size={14} className="text-emerald-500" /> Already Returned
+                  <CheckCircle2 size={14} className="text-emerald-500" /> No Action Needed
                 </span>
-                <span className="text-xs text-muted-foreground">Return button is no longer needed</span>
               </div>
             )}
           </div>
@@ -568,7 +868,7 @@ export default function RequestReturnModal({
             >
               {isWindowExpired || isAllAlreadyReturned ? "Close" : "Cancel"}
             </button>
-            {!isWindowExpired && !isAllAlreadyReturned && (
+            {!isWindowExpired && !isAllAlreadyReturned && selectedItemsList.length > 0 && (
               <>
                 <button
                   type="button"
@@ -589,7 +889,13 @@ export default function RequestReturnModal({
                 <button
                   type="button"
                   onClick={() => handleSubmitAction("Completed")}
-                  disabled={submittingAction !== null || selectedItemsList.length === 0}
+                  disabled={
+                    submittingAction !== null ||
+                    selectedItemsList.length === 0 ||
+                    !selectedReplacementProduct ||
+                    replacementTotal < totalRefund ||
+                    isCashInsufficient
+                  }
                   className="h-9 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm shadow-emerald-600/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap"
                 >
                   {submittingAction === "Completed" ? (
@@ -598,7 +904,7 @@ export default function RequestReturnModal({
                     </>
                   ) : (
                     <>
-                      <CheckCircle2 size={14} /> Approve & Complete Refund
+                      <CheckCircle2 size={14} /> Approve &amp; Issue Replacement
                     </>
                   )}
                 </button>

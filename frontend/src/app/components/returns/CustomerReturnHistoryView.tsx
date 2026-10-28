@@ -83,7 +83,7 @@ export default function CustomerReturnHistoryView() {
       case "Completed":
         return (
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-            <CheckCircle size={12} /> Refund Completed
+            <CheckCircle size={12} /> Replacement Completed
           </span>
         );
       case "Approved":
@@ -152,7 +152,7 @@ export default function CustomerReturnHistoryView() {
 
         <div className="p-4 rounded-2xl bg-card border border-border shadow-xs">
           <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-bold uppercase tracking-wider text-emerald-500">Refunds Received</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-emerald-500">Items Replaced</span>
             <CheckCircle size={16} className="text-emerald-500" />
           </div>
           <p className="text-2xl font-extrabold text-emerald-500 font-mono mt-2">
@@ -162,7 +162,7 @@ export default function CustomerReturnHistoryView() {
 
         <div className="p-4 rounded-2xl bg-card border border-border shadow-xs">
           <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-bold uppercase tracking-wider text-purple-500">Total Refunded</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-purple-500">Total Value Replaced</span>
             <DollarSign size={16} className="text-purple-500" />
           </div>
           <p className="text-2xl font-extrabold text-purple-500 font-mono mt-2">
@@ -289,8 +289,9 @@ export default function CustomerReturnHistoryView() {
                   <span className="text-muted-foreground">{selectedReturn.created_at}</span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground block font-semibold">Total Refund</span>
+                  <span className="text-muted-foreground block font-semibold">Replacement Value</span>
                   <span className="font-extrabold text-emerald-500 font-mono text-sm">{peso(selectedReturn.refund_amount)}</span>
+                  <span className="text-[10px] text-muted-foreground block font-normal">Cash Refund: ₱0.00 (Item Replaced)</span>
                 </div>
               </div>
 
@@ -321,10 +322,38 @@ export default function CustomerReturnHistoryView() {
                   </div>
                 ) : (
                   <div className="p-4 rounded-xl bg-muted/40 border border-border text-xs text-muted-foreground text-center">
-                    {selectedReturn.total_items_quantity || 1} item(s) refunded
+                    {selectedReturn.total_items_quantity || 1} item(s) replaced
                   </div>
                 )}
               </div>
+
+              {/* Replacement item received */}
+              {selectedReturn.replacement_product_name && (
+                <div className="p-3.5 rounded-2xl bg-muted/40 border border-border space-y-1.5 text-xs">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
+                    Replacement Item Received
+                  </span>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-extrabold text-foreground text-sm">
+                        {selectedReturn.replacement_quantity || 1}× {selectedReturn.replacement_product_name}
+                      </p>
+                      <p className="text-muted-foreground text-[11px]">
+                        Value: {peso(Number(selectedReturn.replacement_unit_price || 0))}
+                      </p>
+                    </div>
+                    {Number(selectedReturn.additional_amount_paid) > 0 ? (
+                      <span className="px-2 py-0.5 rounded-lg text-[11px] font-bold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
+                        +{peso(Number(selectedReturn.additional_amount_paid))} Paid
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-lg text-[11px] font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                        ₱0.00 (Even Exchange)
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Reason */}
               <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs space-y-1">
@@ -426,7 +455,7 @@ export default function CustomerReturnHistoryView() {
                       <th className="px-5 py-3">Date</th>
                       <th className="px-5 py-3">Cashier</th>
                       <th className="px-5 py-3">Reason</th>
-                      <th className="px-5 py-3 text-right">Refund</th>
+                      <th className="px-5 py-3 text-right">Replacement Value</th>
                       <th className="px-5 py-3 text-center">Status</th>
                       <th className="px-5 py-3 text-right">Action</th>
                     </tr>
@@ -441,6 +470,7 @@ export default function CustomerReturnHistoryView() {
                         <td className="px-5 py-3.5 text-muted-foreground max-w-[140px] truncate">{r.reason}</td>
                         <td className="px-5 py-3.5 text-right font-mono font-extrabold text-emerald-500">
                           {peso(r.refund_amount)}
+                          <span className="text-[10px] text-muted-foreground block font-normal">Item Replaced</span>
                         </td>
                         <td className="px-5 py-3.5 text-center">{getStatusBadge(r.status)}</td>
                         <td className="px-5 py-3.5 text-right">

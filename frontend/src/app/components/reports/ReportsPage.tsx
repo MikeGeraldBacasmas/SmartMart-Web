@@ -5,7 +5,7 @@ import {
   RefreshCw, CheckCircle2, AlertCircle, Eye, X, ArrowUpRight,
   ArrowDownRight, Package, UserCheck, ShieldCheck, CreditCard,
   Building2, Sparkles, ChevronDown, ChevronLeft, ChevronRight, BarChart2, PieChart as PieChartIcon,
-  RotateCcw,
+  RotateCcw, ShieldAlert,
 } from "lucide-react";
 import {
   ResponsiveContainer, AreaChart, Area, BarChart, Bar, PieChart, Pie,
@@ -25,6 +25,7 @@ import {
   ReportTransactionItem,
   ReturnsAnalyticsReport,
   ReportReturnItem,
+  DamageIncident,
 } from "../../../api";
 import logoImg from "../../../assets/SmartMart_Logo.jpg";
 
@@ -46,7 +47,7 @@ const formatDateStr = (d: Date): string => {
   return `${year}-${month}-${day}`;
 };
 
-type PresetRange = "today" | "yesterday" | "this_week" | "this_month" | "last_month" | "this_year" | "custom" | "custom_month";
+type PresetRange = "today" | "yesterday" | "this_week" | "this_month" | "last_month" | "this_year" | "custom" | "custom_month" | "custom_year";
 
 const MONTH_OPTIONS = [
   { value: 0, label: "January" },
@@ -126,17 +127,18 @@ export default function ReportsPage() {
 
   const [selectedMonth, setSelectedMonth] = useState<number>(() => new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState<number>(() => new Date().getFullYear());
+  const [selectedCustomYear, setSelectedCustomYear] = useState<number>(() => new Date().getFullYear());
 
   const availableYears = useMemo(() => {
     const curYear = new Date().getFullYear();
-    const minYear = Math.min(2020, curYear - 6, selectedYear);
-    const maxYear = Math.max(curYear + 2, 2030, selectedYear);
+    const minYear = Math.min(2020, curYear - 6, selectedYear, selectedCustomYear);
+    const maxYear = Math.max(curYear + 2, 2030, selectedYear, selectedCustomYear);
     const years: number[] = [];
     for (let y = maxYear; y >= minYear; y--) {
       years.push(y);
     }
     return years;
-  }, [selectedYear]);
+  }, [selectedYear, selectedCustomYear]);
 
   // Granularity for overview chart
   const [overviewGroupBy, setOverviewGroupBy] = useState<"daily" | "weekly" | "monthly" | "yearly">("daily");
@@ -164,6 +166,19 @@ export default function ReportsPage() {
   const [returnSearch, setReturnSearch] = useState("");
   const [returnStatusFilter, setReturnStatusFilter] = useState("All");
   const [selectedReturnDetail, setSelectedReturnDetail] = useState<ReportReturnItem | null>(null);
+
+  // Damaged Merchandise Report States
+  const [damagesData, setDamagesData] = useState<DamageIncident[]>(() => {
+    try {
+      const cached = localStorage.getItem("smartmart_damage_incidents");
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [damageSearch, setDamageSearch] = useState("");
+  const [damageStatusFilter, setDamageStatusFilter] = useState("All");
+  const [damageStaffFilter, setDamageStaffFilter] = useState("All");
 
   // Client-side sort for best sellers
   const sortedBestSellers = useMemo(() => {
@@ -211,6 +226,27 @@ export default function ReportsPage() {
     } else if (p === "this_year") {
       f = new Date(now.getFullYear(), 0, 1);
       t = new Date(now.getFullYear(), 11, 31);
+      setOverviewGroupBy("monthly");
+    } else if (p === "custom_year") {
+      let y = selectedCustomYear;
+      if (appliedDates.from) {
+        const parts = appliedDates.from.split("-");
+        if (parts.length === 3) {
+          const parsedY = parseInt(parts[0], 10);
+          if (!isNaN(parsedY) && parsedY >= 2000 && parsedY <= 2100) {
+            y = parsedY;
+            setSelectedCustomYear(y);
+          }
+        }
+      }
+      f = new Date(y, 0, 1);
+      t = new Date(y, 11, 31);
+      setOverviewGroupBy("monthly");
+      const fromStr = formatDateStr(f);
+      const toStr = formatDateStr(t);
+      setFromDate(fromStr);
+      setToDate(toStr);
+      setAppliedDates({ from: fromStr, to: toStr });
     } else if (p === "custom_month") {
       let y = selectedYear;
       let m = selectedMonth;
@@ -236,7 +272,7 @@ export default function ReportsPage() {
       setAppliedDates({ from: fromStr, to: toStr });
     }
 
-    if (p !== "custom" && p !== "custom_month") {
+    if (p !== "custom" && p !== "custom_month" && p !== "custom_year") {
       const fromStr = formatDateStr(f);
       const toStr = formatDateStr(t);
       setFromDate(fromStr);
@@ -344,6 +380,34 @@ export default function ReportsPage() {
     toast.info(`Reset to current month (${MONTH_OPTIONS[curMonth]?.label || ""} ${curYear})`);
   };
 
+  const handleCustomYearChange = (newYear: number) => {
+    setSelectedCustomYear(newYear);
+    const f = new Date(newYear, 0, 1);
+    const t = new Date(newYear, 11, 31);
+    const fromStr = formatDateStr(f);
+    const toStr = formatDateStr(t);
+    setFromDate(fromStr);
+    setToDate(toStr);
+    setAppliedDates({ from: fromStr, to: toStr });
+    toast.success(`Filter applied for Year ${newYear}!`);
+  };
+
+  const handlePrevCustomYear = () => {
+    const nextY = selectedCustomYear - 1;
+    handleCustomYearChange(nextY);
+  };
+
+  const handleNextCustomYear = () => {
+    const nextY = selectedCustomYear + 1;
+    handleCustomYearChange(nextY);
+  };
+
+  const handleResetCustomYear = () => {
+    const curYear = new Date().getFullYear();
+    handleCustomYearChange(curYear);
+    toast.info(`Reset to Year ${curYear}`);
+  };
+
   const handleResetFilter = () => {
     handleSelectPreset("this_month");
     setSelectedMonth(new Date().getMonth());
@@ -392,6 +456,21 @@ export default function ReportsPage() {
       setPaymentMethods(payRes);
       setTransactions(txRes);
       setReturnsData(returnsRes);
+
+      try {
+        const dmgRes = await api.damages.getAll();
+        if (Array.isArray(dmgRes)) {
+          setDamagesData(dmgRes);
+          try {
+            localStorage.setItem("smartmart_damage_incidents", JSON.stringify(dmgRes));
+          } catch {}
+        }
+      } catch {
+        try {
+          const cached = localStorage.getItem("smartmart_damage_incidents");
+          if (cached) setDamagesData(JSON.parse(cached));
+        } catch {}
+      }
     } catch (err: any) {
       console.error("Failed to load reports data:", err);
       setError(err.message || "Unable to load report data. Please try again.");
@@ -503,6 +582,87 @@ export default function ReportsPage() {
     }
   };
 
+  // Filtered damages for the active period
+  const filteredDamages = useMemo(() => {
+    return damagesData.filter(d => {
+      if (d.created_at) {
+        const dDate = formatDateStr(new Date(d.created_at));
+        if (appliedDates.from && dDate < appliedDates.from) return false;
+        if (appliedDates.to && dDate > appliedDates.to) return false;
+      }
+      if (damageStatusFilter !== "All" && d.consequence_status !== damageStatusFilter) return false;
+      if (damageStaffFilter !== "All" && d.staff_name !== damageStaffFilter) return false;
+      if (damageSearch.trim()) {
+        const q = damageSearch.toLowerCase();
+        const matchName = (d.product_name || "").toLowerCase().includes(q);
+        const matchStaff = (d.staff_name || "").toLowerCase().includes(q);
+        const matchReason = (d.reason || "").toLowerCase().includes(q);
+        const matchNo = (d.incident_no || "").toLowerCase().includes(q);
+        if (!matchName && !matchStaff && !matchReason && !matchNo) return false;
+      }
+      return true;
+    });
+  }, [damagesData, appliedDates, damageStatusFilter, damageStaffFilter, damageSearch]);
+
+  const damageSummary = useMemo(() => {
+    const totalIncidents = filteredDamages.length;
+    const totalUnits = filteredDamages.reduce((sum, d) => sum + Number(d.quantity || 0), 0);
+    const totalLoss = filteredDamages.reduce((sum, d) => sum + Number(d.total_cost || 0), 0);
+    const pendingDeductions = filteredDamages
+      .filter(d => d.consequence_status === "Pending Payroll Deduction")
+      .reduce((sum, d) => sum + Number(d.total_cost || 0), 0);
+    const settledDeductions = filteredDamages
+      .filter(d => d.consequence_status === "Deducted from Salary")
+      .reduce((sum, d) => sum + Number(d.total_cost || 0), 0);
+    const waivedLoss = filteredDamages
+      .filter(d => d.consequence_status === "Waived - Store Loss")
+      .reduce((sum, d) => sum + Number(d.total_cost || 0), 0);
+    return {
+      totalIncidents,
+      totalUnits,
+      totalLoss,
+      pendingDeductions,
+      settledDeductions,
+      waivedLoss,
+    };
+  }, [filteredDamages]);
+
+  const staffDamageLeaderboard = useMemo(() => {
+    const map: Record<string, { count: number; totalCost: number }> = {};
+    filteredDamages.forEach(d => {
+      const name = d.staff_name || "Unknown Staff";
+      if (!map[name]) map[name] = { count: 0, totalCost: 0 };
+      map[name].count += Number(d.quantity || 0);
+      map[name].totalCost += Number(d.total_cost || 0);
+    });
+    return Object.entries(map).sort((a, b) => b[1].totalCost - a[1].totalCost);
+  }, [filteredDamages]);
+
+  const damageReasonsBreakdown = useMemo(() => {
+    const map: Record<string, { count: number; totalCost: number }> = {};
+    filteredDamages.forEach(d => {
+      const r = d.reason || "Other";
+      if (!map[r]) map[r] = { count: 0, totalCost: 0 };
+      map[r].count += 1;
+      map[r].totalCost += Number(d.total_cost || 0);
+    });
+    return Object.entries(map).sort((a, b) => b[1].count - a[1].count);
+  }, [filteredDamages]);
+
+  const handleUpdateDamageStatusFromReport = async (incidentId: number, newStatus: string) => {
+    try {
+      await api.damages.updateStatus(incidentId, { consequence_status: newStatus });
+    } catch {}
+    setDamagesData(prev => {
+      const updated = prev.map(inc => inc.id === incidentId ? { ...inc, consequence_status: newStatus } : inc);
+      try {
+        localStorage.setItem("smartmart_damage_incidents", JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+    toast.success(`Incident consequence updated to "${newStatus}"`);
+  };
+
   // Export handlers
   const handleExportCSV = () => {
     if (!summary) return;
@@ -541,17 +701,17 @@ export default function ReportsPage() {
     csv += `\n`;
 
     if (returnsData) {
-      csv += `--- RETURNS & REFUNDS SUMMARY ---\n`;
+      csv += `--- RETURNS & REPLACEMENT SUMMARY ---\n`;
       csv += `Total Return Requests,${returnsData.summary.total_returns}\n`;
       csv += `Pending Requests,${returnsData.summary.pending_count}\n`;
       csv += `Approved / Done Requests,${returnsData.summary.approved_count}\n`;
       csv += `Rejected Requests,${returnsData.summary.rejected_count}\n`;
-      csv += `Total Refunded Amount,${returnsData.summary.total_refunded}\n`;
+      csv += `Total Replacement Value,${returnsData.summary.total_refunded}\n`;
       csv += `Total Items Returned,${returnsData.summary.items_returned_count}\n\n`;
 
       if (returnsData.reasons && returnsData.reasons.length > 0) {
         csv += `--- RETURN REASONS BREAKDOWN ---\n`;
-        csv += `Reason,Count,Refund Amount,Items Returned\n`;
+        csv += `Reason,Count,Replacement Value,Items Returned\n`;
         returnsData.reasons.forEach(r => {
           csv += `"${(r.reason || "").replace(/"/g, '""')}",${r.count},${r.refund_amount},${r.items_count}\n`;
         });
@@ -560,7 +720,7 @@ export default function ReportsPage() {
 
       if (returnsData.top_returned_products && returnsData.top_returned_products.length > 0) {
         csv += `--- TOP RETURNED PRODUCTS ---\n`;
-        csv += `Product Name,Category,Return Incidents,Quantity Returned,Total Refund Amount,Restocked Quantity\n`;
+        csv += `Product Name,Category,Return Incidents,Quantity Returned,Total Replacement Value,Restocked Quantity\n`;
         returnsData.top_returned_products.forEach(p => {
           csv += `"${(p.product_name || "").replace(/"/g, '""')}","${(p.category || "").replace(/"/g, '""')}",${p.return_occurrences},${p.total_quantity_returned},${p.total_refund_amount},${p.total_restocked_quantity}\n`;
         });
@@ -570,7 +730,7 @@ export default function ReportsPage() {
       const returnList = returnsData.returns_list || [];
       if (returnList.length > 0) {
         csv += `--- RETURN REQUESTS & RETURNED ITEMS LOG ---\n`;
-        csv += `Return No,Date,Receipt No,Customer Name,Customer Code,Reason,Returned Items Summary,Quantity Returned,Refund Amount,Status,Customer Notes,Admin Notes\n`;
+        csv += `Return No,Date,Receipt No,Customer Name,Customer Code,Reason,Returned Items Summary,Quantity Returned,Replacement Value,Status,Customer Notes,Admin Notes\n`;
         returnList.forEach(r => {
           const custNotes = (r.customer_notes || "").replace(/"/g, '""');
           const admNotes = (r.admin_notes || "").replace(/"/g, '""');
@@ -579,6 +739,22 @@ export default function ReportsPage() {
         });
         csv += `\n`;
       }
+    }
+
+    if (filteredDamages.length > 0) {
+      csv += `--- MERCHANDISE DAMAGE & INVENTORY LOSS REPORT ---\n`;
+      csv += `Total Damaged Incidents,${damageSummary.totalIncidents}\n`;
+      csv += `Total Units Written Off,${damageSummary.totalUnits}\n`;
+      csv += `Total Merchandise Loss / Liability,${damageSummary.totalLoss}\n`;
+      csv += `Pending Payroll Deductions,${damageSummary.pendingDeductions}\n`;
+      csv += `Settled Salary Deductions,${damageSummary.settledDeductions}\n`;
+      csv += `Waived Store Losses,${damageSummary.waivedLoss}\n\n`;
+
+      csv += `Incident No,Date,Product,Staff Responsible,Quantity Damaged,Unit Cost,Total Loss / Penalty,Cause / Reason,Consequence Status\n`;
+      filteredDamages.forEach(d => {
+        csv += `"${d.incident_no}","${d.created_at}","${(d.product_name || "").replace(/"/g, '""')}","${(d.staff_name || "").replace(/"/g, '""')}",${d.quantity},${d.unit_cost},${d.total_cost},"${(d.reason || "").replace(/"/g, '""')}","${d.consequence_status}"\n`;
+      });
+      csv += `\n`;
     }
 
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -688,6 +864,23 @@ export default function ReportsPage() {
           <td class="text-center font-mono font-bold" style="color:#b91c1c">${p.total_quantity_returned}</td>
           <td class="text-center font-mono font-bold" style="color:#047857">${p.total_restocked_quantity}</td>
           <td class="text-right font-mono font-bold">₱${p.total_refund_amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+        </tr>`
+      )
+      .join("");
+
+    const damageRows = filteredDamages
+      .slice(0, 30)
+      .map(
+        d => `
+        <tr>
+          <td class="font-mono font-bold" style="color:#d97706">${d.incident_no}</td>
+          <td class="font-mono text-sm">${new Date(d.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</td>
+          <td class="font-bold">${d.product_name}</td>
+          <td>${d.staff_name}</td>
+          <td class="text-center font-mono font-bold text-danger">-${d.quantity}</td>
+          <td class="text-right font-mono font-bold">₱${Number(d.total_cost || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+          <td>${d.reason}</td>
+          <td class="text-center"><span class="badge ${d.consequence_status === "Deducted from Salary" ? "badge-approved" : d.consequence_status === "Waived - Store Loss" ? "badge-cancelled" : "badge-pending"}">${d.consequence_status}</span></td>
         </tr>`
       )
       .join("");
@@ -1048,7 +1241,7 @@ export default function ReportsPage() {
 
         <div class="section" style="margin-top: 18px;">
           <div class="section-heading" style="color: #c2410c; border-bottom-color: #ffedd5;">
-            Product Returns & Refunds Summary
+            Product Returns & Replacement Summary
           </div>
           <div class="kpi-container" style="grid-template-columns: repeat(6, 1fr); margin-bottom: 12px;">
             <div class="kpi-box" style="border-color: #ffedd5; background: #fffaf5;">
@@ -1072,9 +1265,9 @@ export default function ReportsPage() {
               <div class="kpi-sub" style="color: #b91c1c;">Declined</div>
             </div>
             <div class="kpi-box" style="border-color: #ffedd5; background: #fffaf5;">
-              <div class="kpi-title" style="color: #9a3412;">Total Refunded</div>
+              <div class="kpi-title" style="color: #9a3412;">Total Replacement Value</div>
               <div class="kpi-value" style="color: #c2410c;">₱${(returnsData?.summary.total_refunded ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-              <div class="kpi-sub" style="color: #ea580c;">Cash refunded</div>
+              <div class="kpi-sub" style="color: #ea580c;">Merchandise replaced</div>
             </div>
             <div class="kpi-box" style="border-color: #ffedd5; background: #fffaf5;">
               <div class="kpi-title" style="color: #9a3412;">Items Returned</div>
@@ -1093,7 +1286,7 @@ export default function ReportsPage() {
                   <th>Reason</th>
                   <th class="text-center">Requests</th>
                   <th class="text-center">Items</th>
-                  <th class="text-right">Refund Amount</th>
+                  <th class="text-right">Replacement Value</th>
                 </tr>
               </thead>
               <tbody>
@@ -1112,7 +1305,7 @@ export default function ReportsPage() {
                   <th class="text-center">Reqs</th>
                   <th class="text-center">Returned</th>
                   <th class="text-center">Restocked</th>
-                  <th class="text-right">Refund</th>
+                  <th class="text-right">Replacement Value</th>
                 </tr>
               </thead>
               <tbody>
@@ -1134,12 +1327,34 @@ export default function ReportsPage() {
                 <th>Returned Items</th>
                 <th>Reason</th>
                 <th class="text-center">Qty</th>
-                <th class="text-right">Refund</th>
+                <th class="text-right">Replacement Value</th>
                 <th class="text-center">Status</th>
               </tr>
             </thead>
             <tbody>
               ${returnLogRows || '<tr><td colspan="9" class="text-center text-muted">No return records for this period</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Merchandise Damage & Staff Liabilities Section -->
+        <div class="section">
+          <div class="section-heading">Merchandise Damage & Inventory Loss (${filteredDamages.length} Incidents • Total Loss: ₱${damageSummary.totalLoss.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})</div>
+          <table>
+            <thead>
+              <tr>
+                <th>Incident #</th>
+                <th>Date</th>
+                <th>Product</th>
+                <th>Staff Responsible</th>
+                <th class="text-center">Qty</th>
+                <th class="text-right">Penalty (Cost)</th>
+                <th>Reason</th>
+                <th class="text-center">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${damageRows || '<tr><td colspan="8" class="text-center text-muted">No merchandise damage incidents recorded for this period</td></tr>'}
             </tbody>
           </table>
         </div>
@@ -1388,10 +1603,10 @@ export default function ReportsPage() {
 
       {/* ─── 3. DATE RANGE FILTER BAR ───────────────────────────────────────── */}
       <div className="bg-card rounded-2xl border border-border p-4 sm:p-5 shadow-sm space-y-4">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 flex-wrap">
           
           {/* Preset Buttons */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-2 lg:pb-0 scrollbar-hide">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1.5 scrollbar-hide flex-1 min-w-0">
             {([
               ["today", "Today"],
               ["yesterday", "Yesterday"],
@@ -1401,6 +1616,7 @@ export default function ReportsPage() {
               ["this_year", "This Year"],
               ["custom", "Custom Date Range"],
               ["custom_month", "Custom Month"],
+              ["custom_year", "Custom Year"],
             ] as [PresetRange, string][]).map(([val, lbl]) => (
               <button
                 key={val}
@@ -1417,14 +1633,20 @@ export default function ReportsPage() {
           </div>
 
           {/* Active Period Label */}
-          <div className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5 self-end lg:self-auto">
+          <div className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5 shrink-0 whitespace-nowrap self-end lg:self-auto">
             <span>Filtered Period:</span>
-            <span className="font-extrabold text-emerald-600 dark:text-emerald-400 bg-emerald-500/15 px-2.5 py-1 rounded-lg border border-emerald-500/30 flex items-center gap-1.5">
+            <span className="font-extrabold text-emerald-600 dark:text-emerald-400 bg-emerald-500/15 px-2.5 py-1 rounded-lg border border-emerald-500/30 flex items-center gap-1.5 whitespace-nowrap">
               {isRefreshing && <RefreshCw size={11} className="animate-spin text-emerald-600" />}
               {preset === "custom_month" ? (
                 <>
                   <Calendar size={13} className="text-emerald-600 shrink-0" />
                   <span>{MONTH_OPTIONS[selectedMonth]?.label} {selectedYear}</span>
+                  <span className="text-emerald-700/70 font-mono text-[11px] font-normal">({appliedDates.from} &nbsp;→&nbsp; {appliedDates.to})</span>
+                </>
+              ) : preset === "custom_year" ? (
+                <>
+                  <Calendar size={13} className="text-emerald-600 shrink-0" />
+                  <span>Year {selectedCustomYear}</span>
                   <span className="text-emerald-700/70 font-mono text-[11px] font-normal">({appliedDates.from} &nbsp;→&nbsp; {appliedDates.to})</span>
                 </>
               ) : (
@@ -1556,6 +1778,63 @@ export default function ReportsPage() {
             <div className="text-[11px] text-gray-400 font-mono hidden md:flex items-center gap-1.5">
               <span>Period:</span>
               <span className="font-bold text-gray-600">{appliedDates.from} &nbsp;→&nbsp; {appliedDates.to}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Custom Year Picker Controls */}
+        {preset === "custom_year" && (
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-border animate-in fade-in duration-200">
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Quick Prev / Next Year Step Controls */}
+              <div className="flex items-center bg-muted/60 rounded-xl p-0.5 border border-border shadow-2xs">
+                <button
+                  type="button"
+                  onClick={handlePrevCustomYear}
+                  title="Previous Year"
+                  className="p-1.5 hover:bg-card text-muted-foreground hover:text-foreground rounded-lg transition-colors cursor-pointer"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                <span className="px-3 text-xs font-extrabold text-foreground select-none">
+                  Year {selectedCustomYear}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleNextCustomYear}
+                  title="Next Year"
+                  className="p-1.5 hover:bg-card text-muted-foreground hover:text-foreground rounded-lg transition-colors cursor-pointer"
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+
+              {/* Direct Year Dropdown Selection */}
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-bold text-muted-foreground">Select Year:</label>
+                <select
+                  value={selectedCustomYear}
+                  onChange={e => handleCustomYearChange(Number(e.target.value))}
+                  className="px-3 py-1.5 bg-background border border-border rounded-xl text-xs font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/30 cursor-pointer hover:bg-muted/50 transition-colors"
+                >
+                  {availableYears.map(y => (
+                    <option key={y} value={y}>
+                      {y}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleResetCustomYear}
+                className="px-3.5 py-1.5 bg-muted text-muted-foreground hover:text-foreground text-xs font-bold rounded-xl hover:bg-muted/80 transition-colors cursor-pointer flex items-center gap-1.5"
+              >
+                <RotateCcw size={13} />
+                <span>Current Year</span>
+              </button>
             </div>
           </div>
         )}
@@ -1732,6 +2011,8 @@ export default function ReportsPage() {
                     No transaction data available for{" "}
                     {preset === "custom_month"
                       ? `${MONTH_OPTIONS[selectedMonth]?.label} ${selectedYear}`
+                      : preset === "custom_year"
+                      ? `Year ${selectedCustomYear}`
                       : "the selected period"}
                     .
                   </p>
@@ -2181,7 +2462,7 @@ export default function ReportsPage() {
               <div className="bg-card rounded-2xl border border-border p-5 sm:p-6 shadow-sm space-y-5">
                 <div className="flex items-center gap-2">
                   <RotateCcw size={20} className="text-orange-500" />
-                  <h2 className="text-lg font-extrabold text-foreground">Returns & Refunds Analytics</h2>
+                  <h2 className="text-lg font-extrabold text-foreground">Returns & Replacement Analytics</h2>
                   {returnsData.summary.pending_count > 0 && (
                     <span className="ml-auto px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-500 text-[10px] font-extrabold border border-amber-500/20 animate-pulse">
                       {returnsData.summary.pending_count} Pending
@@ -2208,7 +2489,7 @@ export default function ReportsPage() {
                     <p className="text-xl font-extrabold text-red-500 mt-1 font-mono">{returnsData.summary.rejected_count}</p>
                   </div>
                   <div className="bg-blue-500/10 rounded-xl border border-blue-500/20 p-3.5 text-center">
-                    <p className="text-[10px] font-bold text-blue-400 uppercase tracking-wider">Total Refunded</p>
+                    <p className="text-[10px] font-bold text-blue-400 uppercase tracking-wider">Total Value Replaced</p>
                     <p className="text-lg font-extrabold text-blue-500 mt-1 font-mono">{peso(returnsData.summary.total_refunded)}</p>
                   </div>
                   <div className="bg-purple-500/10 rounded-xl border border-purple-500/20 p-3.5 text-center">
@@ -2249,7 +2530,7 @@ export default function ReportsPage() {
                               </div>
                               <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
                                 <span>{r.items_count} items</span>
-                                <span>Refunded: {peso(r.refund_amount)}</span>
+                                <span>Replacement Value: {peso(r.refund_amount)}</span>
                               </div>
                             </div>
                           );
@@ -2273,7 +2554,7 @@ export default function ReportsPage() {
                               <th className="py-2 px-2 text-center">Returns</th>
                               <th className="py-2 px-2 text-center">Qty</th>
                               <th className="py-2 px-2 text-center">Restocked</th>
-                              <th className="py-2 px-2 text-right">Refund</th>
+                              <th className="py-2 px-2 text-right">Replacement Value</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-border/60">
@@ -2350,7 +2631,7 @@ export default function ReportsPage() {
                         <th className="py-3 px-3">Customer</th>
                         <th className="py-3 px-3">Reason</th>
                         <th className="py-3 px-3 text-center">Items</th>
-                        <th className="py-3 px-3 text-right">Refund</th>
+                        <th className="py-3 px-3 text-right">Replacement Value</th>
                         <th className="py-3 px-3 text-center">Status</th>
                         <th className="py-3 px-3 text-right">Action</th>
                       </tr>
@@ -2386,6 +2667,7 @@ export default function ReportsPage() {
                             </td>
                             <td className="py-3 px-3 text-right font-mono font-extrabold text-emerald-500">
                               {peso(r.refund_amount)}
+                              <span className="text-[9px] text-muted-foreground block font-normal">Item Replaced</span>
                             </td>
                             <td className="py-3 px-3 text-center">
                               <span className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] border ${getReturnStatusStyle(r.status)}`}>
@@ -2410,6 +2692,200 @@ export default function ReportsPage() {
             </div>
           )}
 
+          {/* ─── 13. MERCHANDISE DAMAGE & LOSS ANALYTICS ──────────────────────────── */}
+          <div className="bg-card rounded-2xl border border-border p-5 sm:p-6 shadow-sm space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center shrink-0">
+                  <ShieldAlert size={20} />
+                </div>
+                <div>
+                  <h2 className="text-lg font-extrabold text-foreground">Merchandise Damage & Inventory Loss Report</h2>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Mishandling write-offs, staff liability deductions, and shrinkage records for the period
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="px-3 py-1 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs font-bold border border-amber-500/20">
+                  {filteredDamages.length} Incident{filteredDamages.length !== 1 ? "s" : ""} Recorded
+                </span>
+              </div>
+            </div>
+
+            {/* Damage Summary Metric Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              <div className="bg-amber-500/10 rounded-xl border border-amber-500/20 p-3.5 text-center">
+                <p className="text-[10px] font-bold text-amber-500 uppercase tracking-wider">Total Incidents</p>
+                <p className="text-xl font-extrabold text-amber-600 dark:text-amber-400 mt-1 font-mono">{damageSummary.totalIncidents}</p>
+              </div>
+              <div className="bg-red-500/10 rounded-xl border border-red-500/20 p-3.5 text-center">
+                <p className="text-[10px] font-bold text-red-500 uppercase tracking-wider">Units Written Off</p>
+                <p className="text-xl font-extrabold text-red-600 dark:text-red-400 mt-1 font-mono">{damageSummary.totalUnits} units</p>
+              </div>
+              <div className="bg-rose-500/10 rounded-xl border border-rose-500/20 p-3.5 text-center">
+                <p className="text-[10px] font-bold text-rose-500 uppercase tracking-wider">Total Loss (Cost)</p>
+                <p className="text-base font-extrabold text-rose-600 dark:text-rose-400 mt-1 font-mono">{peso(damageSummary.totalLoss)}</p>
+              </div>
+              <div className="bg-amber-500/10 rounded-xl border border-amber-500/20 p-3.5 text-center">
+                <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Pending Payroll</p>
+                <p className="text-base font-extrabold text-amber-600 dark:text-amber-400 mt-1 font-mono">{peso(damageSummary.pendingDeductions)}</p>
+              </div>
+              <div className="bg-emerald-500/10 rounded-xl border border-emerald-500/20 p-3.5 text-center">
+                <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider">Deducted (Settled)</p>
+                <p className="text-base font-extrabold text-emerald-600 dark:text-emerald-400 mt-1 font-mono">{peso(damageSummary.settledDeductions)}</p>
+              </div>
+              <div className="bg-muted/60 rounded-xl border border-border p-3.5 text-center">
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Waived (Store Loss)</p>
+                <p className="text-base font-extrabold text-foreground mt-1 font-mono">{peso(damageSummary.waivedLoss)}</p>
+              </div>
+            </div>
+
+            {/* Side-by-side: Staff Liabilities + Damage Causes */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-1">
+              {/* Staff Liability Leaderboard */}
+              <div className="p-4 rounded-xl border border-border bg-background space-y-3">
+                <h3 className="font-extrabold text-foreground text-xs uppercase tracking-wider flex items-center gap-1.5">
+                  <UserCheck size={14} className="text-blue-500" /> Staff Liability Summary
+                </h3>
+                {staffDamageLeaderboard.length === 0 ? (
+                  <p className="text-xs text-muted-foreground py-4 text-center">No staff liabilities for this period.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {staffDamageLeaderboard.map(([name, data]) => (
+                      <div key={name} className="flex items-center justify-between text-xs p-2.5 rounded-lg bg-muted/40 border border-border/60">
+                        <div>
+                          <strong className="text-foreground block">{name}</strong>
+                          <span className="text-[10px] text-muted-foreground">{data.count} units damaged</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="font-bold text-amber-600 dark:text-amber-400 font-mono block">{peso(data.totalCost)}</span>
+                          <span className="text-[10px] text-muted-foreground">Salary Deductible</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Damage Causes Breakdown */}
+              <div className="p-4 rounded-xl border border-border bg-background space-y-3">
+                <h3 className="font-extrabold text-foreground text-xs uppercase tracking-wider flex items-center gap-1.5">
+                  <AlertCircle size={14} className="text-amber-500" /> Damage Causes & Incidents
+                </h3>
+                {damageReasonsBreakdown.length === 0 ? (
+                  <p className="text-xs text-muted-foreground py-4 text-center">No recorded incidents for this period.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {damageReasonsBreakdown.map(([reason, data]) => (
+                      <div key={reason} className="flex items-center justify-between text-xs p-2.5 rounded-lg bg-muted/40 border border-border/60">
+                        <span className="text-foreground font-medium truncate max-w-[220px]" title={reason}>{reason}</span>
+                        <div className="text-right shrink-0">
+                          <span className="font-bold text-foreground font-mono mr-2">{data.count}x</span>
+                          <span className="font-mono text-red-500 font-bold">{peso(data.totalCost)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Filter & Search Bar */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+              <div className="relative flex-1 max-w-sm">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  value={damageSearch}
+                  onChange={e => setDamageSearch(e.target.value)}
+                  placeholder="Search damaged product, staff, or incident #..."
+                  className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                />
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <select
+                  value={damageStatusFilter}
+                  onChange={e => setDamageStatusFilter(e.target.value)}
+                  className="px-3 py-1.5 rounded-xl border border-border bg-background text-xs font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-amber-500/30 cursor-pointer"
+                >
+                  <option value="All">All Statuses</option>
+                  <option value="Pending Payroll Deduction">Pending Payroll Deduction</option>
+                  <option value="Deducted from Salary">Deducted from Salary</option>
+                  <option value="Waived - Store Loss">Waived (Store Loss)</option>
+                </select>
+                <select
+                  value={damageStaffFilter}
+                  onChange={e => setDamageStaffFilter(e.target.value)}
+                  className="px-3 py-1.5 rounded-xl border border-border bg-background text-xs font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-amber-500/30 cursor-pointer"
+                >
+                  <option value="All">All Staff Members</option>
+                  {Array.from(new Set(damagesData.map(d => d.staff_name))).map(name => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Incidents Table */}
+            <div className="overflow-x-auto rounded-xl border border-border">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-muted/40 border-b border-border text-muted-foreground font-semibold">
+                    <th className="py-2.5 px-3.5 text-left">Incident #</th>
+                    <th className="py-2.5 px-3.5 text-left">Date</th>
+                    <th className="py-2.5 px-3.5 text-left">Product</th>
+                    <th className="py-2.5 px-3.5 text-left">Staff Responsible</th>
+                    <th className="py-2.5 px-3.5 text-right">Qty</th>
+                    <th className="py-2.5 px-3.5 text-right">Cost Penalty</th>
+                    <th className="py-2.5 px-3.5 text-left">Cause / Reason</th>
+                    <th className="py-2.5 px-3.5 text-center">Consequence Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {filteredDamages.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-8 text-center text-muted-foreground">
+                        No merchandise damage incidents recorded for this period.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredDamages.map(d => (
+                      <tr key={d.id} className="hover:bg-muted/20 transition-colors">
+                        <td className="py-2.5 px-3.5 font-mono font-bold text-amber-600 dark:text-amber-400">{d.incident_no}</td>
+                        <td className="py-2.5 px-3.5 text-muted-foreground font-medium">
+                          {new Date(d.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                        </td>
+                        <td className="py-2.5 px-3.5">
+                          <p className="font-bold text-foreground">{d.product_name}</p>
+                          <p className="text-[10px] text-muted-foreground">{d.category || "General"}</p>
+                        </td>
+                        <td className="py-2.5 px-3.5 font-semibold text-foreground">{d.staff_name}</td>
+                        <td className="py-2.5 px-3.5 text-right font-bold text-red-500 font-mono">-{d.quantity}</td>
+                        <td className="py-2.5 px-3.5 text-right font-extrabold text-foreground font-mono">{peso(d.total_cost)}</td>
+                        <td className="py-2.5 px-3.5 max-w-[180px]">
+                          <p className="text-foreground truncate font-medium" title={d.reason}>{d.reason}</p>
+                          {d.notes && <p className="text-[10px] text-muted-foreground italic truncate" title={d.notes}>"{d.notes}"</p>}
+                        </td>
+                        <td className="py-2.5 px-3.5 text-center">
+                          <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                            d.consequence_status === "Deducted from Salary"
+                              ? "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20"
+                              : d.consequence_status === "Waived - Store Loss"
+                              ? "bg-muted text-muted-foreground"
+                              : "bg-amber-500/10 text-amber-600 border border-amber-500/20"
+                          }`}>
+                            {d.consequence_status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          
           {/* ─── 12. RECEIPT / TRANSACTION HISTORY ──────────────────────────── */}
           <div className="bg-card rounded-2xl border border-border p-5 sm:p-6 shadow-sm space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -2594,10 +3070,13 @@ export default function ReportsPage() {
               </div>
             )}
 
-            {/* Refund Total */}
+            {/* Replacement Total */}
             <div className="border-t border-dashed border-border pt-3">
               <div className="flex justify-between items-center text-sm">
-                <span className="font-bold text-muted-foreground">Total Refund Amount</span>
+                <div>
+                  <span className="font-bold text-muted-foreground block">Total Replacement Value</span>
+                  <span className="text-[10px] text-muted-foreground block font-normal">Cash Refund: ₱0.00 (Customer received replacement items)</span>
+                </div>
                 <span className="font-extrabold text-xl text-emerald-500 font-mono">{peso(selectedReturnDetail.refund_amount)}</span>
               </div>
             </div>

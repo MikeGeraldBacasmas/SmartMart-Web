@@ -239,13 +239,13 @@ export default function ReturnsManagement({ role = "admin", onReturnsUpdated }: 
       case "Approved":
         return (
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30">
-            <CheckCircle size={12} /> Approved
+            <CheckCircle size={12} /> Replacement Approved
           </span>
         );
       case "Completed":
         return (
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
-            <CheckCircle size={12} /> Refund Completed
+            <CheckCircle size={12} /> Replacement Completed
           </span>
         );
       case "Rejected":
@@ -276,7 +276,7 @@ export default function ReturnsManagement({ role = "admin", onReturnsUpdated }: 
         <div>
           <div className="flex items-center gap-2.5">
             <h1 className="text-2xl font-extrabold text-foreground flex items-center gap-2.5">
-              <RotateCcw className="text-emerald-600 dark:text-emerald-500" size={26} /> Product Returns Management
+              <RotateCcw className="text-emerald-600 dark:text-emerald-500" size={26} /> Product Returns & Replacement
             </h1>
             {role === "admin" && (
               <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30 flex items-center gap-1">
@@ -286,8 +286,8 @@ export default function ReturnsManagement({ role = "admin", onReturnsUpdated }: 
           </div>
           <p className="text-muted-foreground text-sm mt-0.5">
             {role === "admin"
-              ? "View and monitor product returns, review customer receipts, inspect items, and track refund history"
-              : "Process walk-in returns, review past returns, inspect items, and manage refunds"}
+              ? "View and monitor product returns, review customer receipts, inspect items, and track item replacement history"
+              : "Process walk-in returns, inspect items, and issue direct item replacements to customers"}
           </p>
         </div>
 
@@ -296,7 +296,7 @@ export default function ReturnsManagement({ role = "admin", onReturnsUpdated }: 
             onClick={openWalkInModal}
             className="px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2 transition-all cursor-pointer shrink-0"
           >
-            <Plus size={16} /> Process Walk-In Return
+            <Plus size={16} /> Process Walk-In Return & Replacement
           </button>
         )}
       </div>
@@ -321,7 +321,7 @@ export default function ReturnsManagement({ role = "admin", onReturnsUpdated }: 
 
         <div className="p-4 rounded-2xl bg-card border border-border shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-emerald-500 uppercase tracking-wider">Refunded & Done</span>
+            <span className="text-xs font-bold text-emerald-500 uppercase tracking-wider">Replaced & Done</span>
             <CheckCircle size={16} className="text-emerald-500" />
           </div>
           <p className="text-2xl font-extrabold text-emerald-500 font-mono mt-2">
@@ -331,7 +331,7 @@ export default function ReturnsManagement({ role = "admin", onReturnsUpdated }: 
 
         <div className="p-4 rounded-2xl bg-card border border-border shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-purple-500 uppercase tracking-wider">Total Refunded</span>
+            <span className="text-xs font-bold text-purple-500 uppercase tracking-wider">Total Value Replaced</span>
             <DollarSign size={16} className="text-purple-500" />
           </div>
           <p className="text-2xl font-extrabold text-purple-500 font-mono mt-2">
@@ -403,7 +403,7 @@ export default function ReturnsManagement({ role = "admin", onReturnsUpdated }: 
                   <th className="px-5 py-3.5">Receipt Reference</th>
                   <th className="px-5 py-3.5">Date Created</th>
                   <th className="px-5 py-3.5">Items</th>
-                  <th className="px-5 py-3.5 text-right">Refund Total</th>
+                  <th className="px-5 py-3.5 text-right">Replacement Value</th>
                   <th className="px-5 py-3.5 text-center">Status</th>
                   <th className="px-5 py-3.5 text-right">Action</th>
                 </tr>
@@ -436,6 +436,20 @@ export default function ReturnsManagement({ role = "admin", onReturnsUpdated }: 
                     </td>
                     <td className="px-5 py-4 text-right font-mono font-extrabold text-emerald-500">
                       {peso(ret.refund_amount)}
+                      {ret.replacement_product_name ? (
+                        <>
+                          <span className="text-[10px] text-foreground font-semibold block truncate max-w-[150px] ml-auto">
+                            Replaced: {ret.replacement_product_name}
+                          </span>
+                          {Number(ret.additional_amount_paid) > 0 && (
+                            <span className="text-[10px] text-purple-600 dark:text-purple-400 block font-bold">
+                              +{peso(Number(ret.additional_amount_paid))} paid
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground block font-normal">Item Replaced</span>
+                      )}
                     </td>
                     <td className="px-5 py-4 text-center">
                       {getStatusBadge(ret.status)}
@@ -1093,15 +1107,16 @@ export default function ReturnsManagement({ role = "admin", onReturnsUpdated }: 
                   <span className="text-foreground font-mono">{reviewReturn.customer_phone || "N/A"}</span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground block font-semibold">Total Refund</span>
+                  <span className="text-muted-foreground block font-semibold">Total Replacement Value</span>
                   <span className="font-extrabold text-emerald-500 font-mono text-sm">{peso(reviewReturn.refund_amount)}</span>
+                  <span className="text-[10px] text-muted-foreground block font-normal">Cash Refund: ₱0.00 (Item Replaced)</span>
                 </div>
               </div>
 
               {/* Items Breakdown */}
               <div>
                 <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-2">
-                  Items to Return
+                  Items to Replace
                 </span>
                 <div className="border border-border rounded-2xl overflow-hidden divide-y divide-border">
                   {reviewReturn.items?.map((item, idx) => (
@@ -1124,6 +1139,36 @@ export default function ReturnsManagement({ role = "admin", onReturnsUpdated }: 
                   ))}
                 </div>
               </div>
+
+              {/* Chosen Replacement Item */}
+              {reviewReturn.replacement_product_name && (
+                <div className="p-4 rounded-2xl bg-muted/40 border border-border space-y-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">
+                    Replacement Item Issued from Store Inventory
+                  </span>
+                  <div className="flex items-center justify-between text-xs">
+                    <div>
+                      <p className="font-extrabold text-foreground text-sm">
+                        {reviewReturn.replacement_quantity || 1}× {reviewReturn.replacement_product_name}
+                      </p>
+                      <p className="text-muted-foreground mt-0.5">
+                        Replacement Unit Price: {peso(Number(reviewReturn.replacement_unit_price || 0))}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      {Number(reviewReturn.additional_amount_paid) > 0 ? (
+                        <span className="px-2.5 py-1 rounded-xl text-xs font-extrabold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
+                          +{peso(Number(reviewReturn.additional_amount_paid))} Added by Customer
+                        </span>
+                      ) : (
+                        <span className="px-2.5 py-1 rounded-xl text-xs font-extrabold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                          ₱0.00 (Even Exchange)
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Reason */}
               <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs space-y-1">
@@ -1160,7 +1205,7 @@ export default function ReturnsManagement({ role = "admin", onReturnsUpdated }: 
                       rows={2}
                       value={adminNotes}
                       onChange={e => setAdminNotes(e.target.value)}
-                      placeholder="e.g., Items inspected at counter; refund paid in cash."
+                      placeholder="e.g., Items inspected at counter; fresh replacement unit(s) handed to customer."
                       className="w-full p-3 text-xs rounded-xl border border-border bg-muted/60 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                     />
                   </div>
@@ -1168,7 +1213,7 @@ export default function ReturnsManagement({ role = "admin", onReturnsUpdated }: 
               ) : reviewReturn.status === "Pending" && role === "admin" ? (
                 <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-600 dark:text-amber-400 flex items-center gap-2.5">
                   <Clock size={16} className="text-amber-500 shrink-0" />
-                  <span><strong>Pending Staff Review:</strong> This return request is awaiting counter inspection and processing by staff. Admin accounts have view-only access.</span>
+                  <span><strong>Pending Staff Review:</strong> This return request is awaiting counter inspection and replacement processing by staff. Admin accounts have view-only access.</span>
                 </div>
               ) : (
                 reviewReturn.admin_notes && (
@@ -1211,7 +1256,7 @@ export default function ReturnsManagement({ role = "admin", onReturnsUpdated }: 
                     onClick={() => handleUpdateStatus("Completed")}
                     className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
                   >
-                    <CheckCircle size={14} /> Approve & Complete Refund
+                    <CheckCircle size={14} /> Approve & Issue Replacement
                   </button>
                 </div>
               ) : null}
