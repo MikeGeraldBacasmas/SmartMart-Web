@@ -35,6 +35,7 @@ interface Product {
   category: string;
   category_id?: number;
   price: number;
+  cost_price?: number | string | null;
   stock: number;
   lowStock: boolean;
   image_url?: string | null;
@@ -1376,6 +1377,7 @@ function StoreProvider({ children }: { children: React.ReactNode }) {
           category: p.category,
           category_id: p.category_id,
           price: Number(p.price),
+          cost_price: p.cost_price != null ? Number(p.cost_price) : undefined,
           stock: p.stock,
           lowStock: p.stock <= (p.low_stock_threshold || 10),
           image_url: p.image_url || null,
@@ -1441,6 +1443,7 @@ function StoreProvider({ children }: { children: React.ReactNode }) {
                 category: p.category,
                 category_id: p.category_id,
                 price: Number(p.price),
+                cost_price: p.cost_price != null ? Number(p.cost_price) : undefined,
                 stock: p.stock,
                 lowStock: p.stock <= (p.low_stock_threshold || 10),
                 image_url: p.image_url || null,
