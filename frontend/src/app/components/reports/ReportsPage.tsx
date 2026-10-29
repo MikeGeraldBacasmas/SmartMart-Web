@@ -649,19 +649,7 @@ export default function ReportsPage() {
     return Object.entries(map).sort((a, b) => b[1].count - a[1].count);
   }, [filteredDamages]);
 
-  const handleUpdateDamageStatusFromReport = async (incidentId: number, newStatus: string) => {
-    try {
-      await api.damages.updateStatus(incidentId, { consequence_status: newStatus });
-    } catch {}
-    setDamagesData(prev => {
-      const updated = prev.map(inc => inc.id === incidentId ? { ...inc, consequence_status: newStatus } : inc);
-      try {
-        localStorage.setItem("smartmart_damage_incidents", JSON.stringify(updated));
-      } catch {}
-      return updated;
-    });
-    toast.success(`Incident consequence updated to "${newStatus}"`);
-  };
+// Process actions handled exclusively on dedicated Damaged Items & Consequences page
 
   // Export handlers
   const handleExportCSV = () => {

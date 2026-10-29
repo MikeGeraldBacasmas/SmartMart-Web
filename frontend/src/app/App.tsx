@@ -8,6 +8,7 @@ import ReturnsManagement from "./components/returns/ReturnsManagement";
 import RequestReturnModal from "./components/returns/RequestReturnModal";
 import CustomerReturnHistoryView from "./components/returns/CustomerReturnHistoryView";
 import CustomerAnalytics from "./components/analytics/CustomerAnalytics";
+import AdminDamagesPage from "./components/damages/AdminDamagesPage";
 import {
   LayoutDashboard, Package, ShoppingCart, Users, BarChart3,
   LogOut, Search, Plus, Minus, Trash2, Bell, AlertTriangle,
@@ -16,7 +17,7 @@ import {
   Eye, EyeOff, Filter, Upload, Image as ImageIcon, Camera, Download,
   Flame, Sparkles, ArrowRight, Award, ArrowLeft, ChevronUp, ChevronDown, List,
   RotateCcw, Percent, Check, AlertCircle, Menu, MapPin, Phone, Clock, Zap, Star, ArrowDown, Lock, Sun, Moon,
-  Loader2, Copy,
+  Loader2, Copy, Info, ShieldAlert,
 } from "lucide-react";
 
 export const getProductImageUrl = (url?: string | null) => resolveBackendUrl(url);
@@ -24,8 +25,8 @@ export const getProductImageUrl = (url?: string | null) => resolveBackendUrl(url
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Role = "login" | "admin" | "staff" | "customer";
-type AdminPage = "dashboard" | "products" | "inventory" | "categories" | "sales" | "returns" | "customers" | "staff" | "reports" | "settings";
-type StaffPage = "dashboard" | "pos" | "transactions" | "returns" | "profile";
+type AdminPage = "dashboard" | "products" | "inventory" | "categories" | "damages" | "sales" | "returns" | "customers" | "staff" | "reports" | "settings";
+type StaffPage = "dashboard" | "pos" | "inventory" | "transactions" | "returns" | "profile";
 type CustomerPage = "browse" | "history" | "analytics" | "returns-history" | "profile";
 
 interface Product {
@@ -416,6 +417,7 @@ const NAV_ITEMS: Record<SidebarRole, NavItem[]> = {
     { id: "products", icon: <Package size={18} />, label: "Products" },
     { id: "categories", icon: <ClipboardList size={18} />, label: "Categories" },
     { id: "inventory", icon: <BarChart3 size={18} />, label: "Inventory" },
+    { id: "damages", icon: <ShieldAlert size={18} />, label: "Damaged Items" },
     { id: "sales", icon: <ShoppingCart size={18} />, label: "Sales" },
     { id: "returns", icon: <RotateCcw size={18} />, label: "Returns" },
     { id: "customers", icon: <User size={18} />, label: "Customers" },
@@ -454,6 +456,7 @@ function Sidebar({
   userName,
   pendingCount = 0,
   pendingReturnsCount = 0,
+  pendingDamagesCount = 0,
   isCollapsed = false,
   onToggleCollapse,
 }: {
@@ -464,6 +467,7 @@ function Sidebar({
   userName: string;
   pendingCount?: number;
   pendingReturnsCount?: number;
+  pendingDamagesCount?: number;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
 }) {
@@ -528,6 +532,11 @@ function Sidebar({
                     {pendingReturnsCount}
                   </span>
                 )}
+                {item.id === "damages" && pendingDamagesCount > 0 && (
+                  <span className="w-4 h-4 bg-rose-500 text-white text-[9px] font-black rounded-full flex items-center justify-center shrink-0 absolute -top-1 -right-1 shadow-sm">
+                    {pendingDamagesCount}
+                  </span>
+                )}
               </button>
               {/* Tooltip on hover */}
               <div className="pointer-events-none absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2.5 py-1.5 bg-slate-900 text-white text-xs font-semibold rounded-lg shadow-xl opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 border border-slate-700/60 flex items-center gap-1.5">
@@ -540,6 +549,11 @@ function Sidebar({
                 {item.id === "returns" && pendingReturnsCount > 0 && (
                   <span className="px-1.5 py-0.5 bg-amber-400 text-slate-900 text-[10px] font-extrabold rounded-full">
                     {pendingReturnsCount}
+                  </span>
+                )}
+                {item.id === "damages" && pendingDamagesCount > 0 && (
+                  <span className="px-1.5 py-0.5 bg-rose-500 text-white text-[10px] font-extrabold rounded-full">
+                    {pendingDamagesCount}
                   </span>
                 )}
               </div>
@@ -562,6 +576,9 @@ function Sidebar({
               )}
               {item.id === "returns" && pendingReturnsCount > 0 && (
                 <span className="w-5 h-5 bg-amber-400 text-slate-900 text-[10px] font-black rounded-full flex items-center justify-center shrink-0 shadow-sm">{pendingReturnsCount}</span>
+              )}
+              {item.id === "damages" && pendingDamagesCount > 0 && (
+                <span className="w-5 h-5 bg-rose-500 text-white text-[10px] font-black rounded-full flex items-center justify-center shrink-0 shadow-sm">{pendingDamagesCount}</span>
               )}
             </button>
           )
@@ -2620,8 +2637,6 @@ function ProductsPage({ products, categories = CATEGORIES, onAddProduct }: { pro
   // Add Product State
   const [showAdd, setShowAdd] = useState(false);
   const [newName, setNewName] = useState("");
-  const [newPrice, setNewPrice] = useState("");
-  const [newStock, setNewStock] = useState("");
   const [newCat, setNewCat] = useState(categories[0]);
   const [addImageFile, setAddImageFile] = useState<File | null>(null);
   const [addImagePreview, setAddImagePreview] = useState<string | null>(null);
@@ -2668,7 +2683,7 @@ function ProductsPage({ products, categories = CATEGORIES, onAddProduct }: { pro
   };
 
   const handleSubmitAdd = async () => {
-    if (!newName.trim() || !newPrice || !newStock) return;
+    if (!newName.trim()) return;
     const name = newName.trim();
     setIsAdding(true);
     try {
@@ -2679,8 +2694,8 @@ function ProductsPage({ products, categories = CATEGORIES, onAddProduct }: { pro
       const created = await api.products.create({
         name,
         category_id: catId,
-        price: parseFloat(newPrice),
-        stock: parseInt(newStock),
+        price: 0,
+        stock: 0,
       });
 
       const newId = (created as any)?.product_id || (created as any)?.id;
@@ -2690,7 +2705,7 @@ function ProductsPage({ products, categories = CATEGORIES, onAddProduct }: { pro
 
       setProductMsg({ type: "success", text: `Product "${name}" added successfully!` });
       setTimeout(() => setProductMsg(null), 5000);
-      setNewName(""); setNewPrice(""); setNewStock(""); setNewCat(categories[0]);
+      setNewName(""); setNewCat(categories[0]);
       setAddImageFile(null); setAddImagePreview(null);
       setShowAdd(false);
       await refreshData();
@@ -2887,8 +2902,12 @@ function ProductsPage({ products, categories = CATEGORIES, onAddProduct }: { pro
                   <input type="number" step="0.01" value={editPrice} onChange={e => setEditPrice(e.target.value)} placeholder="0.00" min="0" className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-foreground mb-1.5">Stock Quantity</label>
-                  <input type="number" value={editStock} onChange={e => setEditStock(e.target.value)} placeholder="0" min="0" className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-sm font-semibold text-foreground">Stock Quantity</label>
+                    <span className="text-[10px] font-semibold text-muted-foreground bg-muted px-1.5 py-0.5 rounded">Staff Restock</span>
+                  </div>
+                  <input type="number" value={editStock} disabled placeholder="0" min="0" className="w-full px-4 py-2.5 rounded-xl border border-border bg-muted/50 text-sm font-bold text-muted-foreground cursor-not-allowed" />
+                  <span className="text-[11px] text-muted-foreground mt-1 block">Restocking is handled by Staff in Inventory</span>
                 </div>
               </div>
 
@@ -2968,16 +2987,6 @@ function ProductsPage({ products, categories = CATEGORIES, onAddProduct }: { pro
                 <label className="block text-sm font-semibold text-foreground mb-1.5">Product Name</label>
                 <input type="text" value={newName} onChange={e => setNewName(e.target.value)} placeholder="e.g. Piattos Cheese 85g" className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-semibold text-foreground mb-1.5">Price (₱)</label>
-                  <input type="number" step="0.01" value={newPrice} onChange={e => setNewPrice(e.target.value)} placeholder="0.00" min="0" className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-foreground mb-1.5">Stock Quantity</label>
-                  <input type="number" value={newStock} onChange={e => setNewStock(e.target.value)} placeholder="0" min="0" className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
-                </div>
-              </div>
               <div>
                 <label className="block text-sm font-semibold text-foreground mb-1.5">Category</label>
                 <select value={newCat} onChange={e => setNewCat(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30">
@@ -2986,7 +2995,7 @@ function ProductsPage({ products, categories = CATEGORIES, onAddProduct }: { pro
               </div>
               <div className="flex gap-3 pt-3 border-t border-border">
                 <button type="button" onClick={() => setShowAdd(false)} className="flex-1 py-2.5 rounded-xl border border-border text-sm font-semibold hover:bg-muted transition-colors">Cancel</button>
-                <button type="button" onClick={handleSubmitAdd} disabled={isAdding} className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition-colors shadow-sm disabled:opacity-50">
+                <button type="button" onClick={handleSubmitAdd} disabled={isAdding || !newName.trim()} className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition-colors shadow-sm disabled:opacity-50">
                   {isAdding ? "Adding Product..." : "Add Product"}
                 </button>
               </div>
@@ -3000,7 +3009,7 @@ function ProductsPage({ products, categories = CATEGORIES, onAddProduct }: { pro
 
 // ─── Inventory Page ───────────────────────────────────────────────────────────
 
-function InventoryPage({ products, categories = CATEGORIES, catMeta = CAT_META }: { products: Product[]; categories?: string[]; catMeta?: CatMeta }) {
+function InventoryPage({ products, categories = CATEGORIES, catMeta = CAT_META, role = "staff" }: { products: Product[]; categories?: string[]; catMeta?: CatMeta; role?: "admin" | "staff" }) {
   const { refreshData } = useStore();
   const [search, setSearch] = useState("");
   const [selectedCat, setSelectedCat] = useState("All");
@@ -3014,6 +3023,84 @@ function InventoryPage({ products, categories = CATEGORIES, catMeta = CAT_META }
   const [restockSellingPrice, setRestockSellingPrice] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Damage reporting states & consequence management
+  const [damageProduct, setDamageProduct] = useState<Product | null>(null);
+  const [damageQty, setDamageQty] = useState<string>("1");
+  const [damageReason, setDamageReason] = useState<string>("Dropped during unboxing / restocking");
+  const [damageNotes, setDamageNotes] = useState<string>("");
+  const [isReportingDamage, setIsReportingDamage] = useState(false);
+  const [damageErrorMsg, setDamageErrorMsg] = useState<string | null>(null);
+
+  const getResolvedCost = (p: Product | null): number => {
+    if (!p) return 0;
+    const storedTotalCost = localStorage.getItem(`smartmart_product_total_cost_${p.id}`);
+    const storedUnitCost = localStorage.getItem(`smartmart_product_cost_${p.id}`);
+    if (storedUnitCost && !isNaN(Number(storedUnitCost))) return Number(storedUnitCost);
+    if (p.cost_price != null && !isNaN(Number(p.cost_price))) return Number(p.cost_price);
+    if (storedTotalCost && !isNaN(Number(storedTotalCost))) return Number(storedTotalCost) / (p.stock || 1);
+    return Number((Number(p.price) * 0.6).toFixed(2));
+  };
+
+  const handleOpenDamage = (p: Product, initialQty: number = 1) => {
+    setDamageProduct(p);
+    setDamageQty(String(initialQty));
+    setDamageReason("Dropped during unboxing / restocking");
+    setDamageNotes("");
+    setDamageErrorMsg(null);
+  };
+
+  const handleCloseDamage = () => {
+    if (isReportingDamage) return;
+    setDamageProduct(null);
+    setDamageErrorMsg(null);
+  };
+
+  const handleSubmitDamage = async () => {
+    if (!damageProduct) return;
+    const qty = parseInt(damageQty, 10);
+    if (isNaN(qty) || qty <= 0) {
+      setDamageErrorMsg("Please enter a valid quantity of at least 1.");
+      return;
+    }
+    if (qty > damageProduct.stock && damageProduct.stock > 0) {
+      setDamageErrorMsg(`Quantity cannot exceed current stock (${damageProduct.stock} units).`);
+      return;
+    }
+
+    const resolvedCost = getResolvedCost(damageProduct);
+    setIsReportingDamage(true);
+    setDamageErrorMsg(null);
+
+    try {
+      await api.damages.create({
+        product_id: damageProduct.id,
+        quantity: qty,
+        reason: damageReason,
+        notes: damageNotes.trim() || undefined,
+        unit_cost: resolvedCost,
+      });
+
+      const totalPenalty = (resolvedCost * qty).toFixed(2);
+      toast.warning(
+        `Damage Incident logged for ${damageProduct.name} (-${qty} units). Consequence: ₱${totalPenalty} pending payroll deduction recorded for Admin review.`,
+        { duration: 6000 }
+      );
+
+      window.dispatchEvent(new CustomEvent("smartmart_damages_updated"));
+      await refreshData();
+      handleCloseDamage();
+      if (restockProduct?.id === damageProduct.id) {
+        handleCloseRestock();
+      }
+    } catch (err: any) {
+      const msg = err.message || "Failed to submit damage report.";
+      setDamageErrorMsg(msg);
+      toast.error(msg);
+    } finally {
+      setIsReportingDamage(false);
+    }
+  };
 
   const lowCount = products.filter(p => p.lowStock).length;
 
@@ -3183,8 +3270,19 @@ function InventoryPage({ products, categories = CATEGORIES, catMeta = CAT_META }
       {/* Header */}
       <div>
         <h1 className="text-2xl font-extrabold text-foreground">Inventory</h1>
-        <p className="text-muted-foreground text-sm">Monitor and restock product levels by category</p>
+        <p className="text-muted-foreground text-sm">
+          {role === "staff"
+            ? "Monitor and restock product levels by category"
+            : "Monitor inventory stock levels across categories (Restock handled by Staff)"}
+        </p>
       </div>
+
+      {role === "admin" && (
+        <div className="flex items-center gap-2.5 p-3.5 bg-blue-50/80 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-2xl text-xs text-blue-700 dark:text-blue-300 font-medium shadow-xs">
+          <Info size={16} className="text-blue-500 shrink-0" />
+          <span><strong>Administrator View:</strong> You can monitor and oversee inventory levels. Restocking items and batch receiving are handled by <strong>Staff Cashiers</strong>.</span>
+        </div>
+      )}
 
       {/* Summary cards */}
       <div className="grid grid-cols-3 gap-4">
@@ -3252,7 +3350,7 @@ function InventoryPage({ products, categories = CATEGORIES, catMeta = CAT_META }
                 <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Category</th>
                 <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Stock</th>
                 <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
-                <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Action</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{role === "staff" ? "Action" : "Restock Access"}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -3283,12 +3381,30 @@ function InventoryPage({ products, categories = CATEGORIES, catMeta = CAT_META }
                     {p.lowStock ? <Badge variant="danger">Restock Needed</Badge> : <Badge variant="success">OK</Badge>}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <button
-                      onClick={() => handleOpenRestock(p)}
-                      className="px-3 py-1.5 text-xs font-bold text-[#22c55e] border border-[#22c55e] bg-white hover:bg-[#22c55e] hover:text-white rounded-lg transition-all shadow-sm flex items-center gap-1 ml-auto"
-                    >
-                      <Plus size={13} /> Restock
-                    </button>
+                    {role === "staff" ? (
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenDamage(p)}
+                          className="px-2.5 py-1.5 text-xs font-bold text-amber-600 dark:text-amber-400 border border-amber-400/40 bg-amber-500/10 hover:bg-amber-500/20 rounded-lg transition-all shadow-xs flex items-center gap-1 cursor-pointer"
+                          title="Report damaged or broken merchandise during handling/restocking"
+                        >
+                          <AlertTriangle size={13} />
+                          <span className="hidden sm:inline">Damage</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenRestock(p)}
+                          className="px-3 py-1.5 text-xs font-bold text-[#22c55e] border border-[#22c55e] bg-white hover:bg-[#22c55e] hover:text-white rounded-lg transition-all shadow-sm flex items-center gap-1 cursor-pointer"
+                        >
+                          <Plus size={13} /> Restock
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="inline-block text-[11px] font-semibold text-muted-foreground bg-muted/60 border border-border px-2.5 py-1 rounded-lg">
+                        Staff Restocked
+                      </span>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -3298,7 +3414,7 @@ function InventoryPage({ products, categories = CATEGORIES, catMeta = CAT_META }
       </div>
 
       {/* Restock Modal */}
-      {restockProduct && (
+      {role === "staff" && restockProduct && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-card rounded-3xl border border-border shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-150">
             {/* Modal Header */}
@@ -3474,6 +3590,25 @@ function InventoryPage({ products, categories = CATEGORIES, catMeta = CAT_META }
                 })()}
               </div>
 
+              {/* Damaged items prompt during restock */}
+              <div className="p-3 bg-amber-500/10 rounded-2xl border border-amber-500/20 flex items-center justify-between gap-3 shadow-xs">
+                <div className="flex items-center gap-2 min-w-0">
+                  <AlertCircle size={15} className="text-amber-600 dark:text-amber-400 shrink-0" />
+                  <span className="text-xs text-foreground font-medium leading-tight">
+                    Did any items arrive broken or get dropped while restocking?
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (restockProduct) handleOpenDamage(restockProduct, 1);
+                  }}
+                  className="px-2.5 py-1 text-xs font-bold bg-amber-500/20 hover:bg-amber-500/30 text-amber-700 dark:text-amber-300 border border-amber-500/30 rounded-lg shrink-0 transition-colors cursor-pointer"
+                >
+                  Report Damage
+                </button>
+              </div>
+
               {/* Error Message */}
               {errorMsg && (
                 <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs font-bold text-rose-500 flex items-center gap-2">
@@ -3507,6 +3642,201 @@ function InventoryPage({ products, categories = CATEGORIES, catMeta = CAT_META }
                 ) : (
                   <>
                     <CheckCircle size={15} /> Confirm Restock
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Report Damaged Item Modal with Consequence Policy */}
+      {damageProduct && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-card rounded-3xl border border-border shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-amber-500/10 dark:bg-amber-950/20 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center border border-amber-500/30">
+                  <ShieldAlert size={20} />
+                </div>
+                <div>
+                  <h2 className="font-extrabold text-foreground text-base leading-tight">Report Damaged Item</h2>
+                  <p className="text-xs text-muted-foreground mt-0.5">Inventory loss write-off & staff liability consequence</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseDamage}
+                disabled={isReportingDamage}
+                className="p-2 hover:bg-muted rounded-xl text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-4 overflow-y-auto">
+              {/* Product Info Card */}
+              <div className="p-3.5 bg-muted/40 rounded-2xl border border-border flex items-center justify-between">
+                <div className="min-w-0 pr-3">
+                  <p className="font-bold text-foreground text-sm truncate">{damageProduct.name}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md ${CAT_COLORS[damageProduct.category] ?? "bg-muted text-foreground"}`}>
+                      {damageProduct.category}
+                    </span>
+                    <span className="text-[11px] font-bold text-muted-foreground bg-muted px-2 py-0.5 rounded-md">
+                      Current Stock: {damageProduct.stock} units
+                    </span>
+                  </div>
+                </div>
+                <div className="text-right shrink-0 bg-card px-3 py-1.5 rounded-xl border border-border shadow-xs">
+                  <span className="text-[11px] text-muted-foreground block font-medium">Unit Cost</span>
+                  <span className="text-sm font-extrabold text-rose-600 dark:text-rose-400" style={{ fontFamily: "'DM Mono', monospace" }}>
+                    {peso(getResolvedCost(damageProduct))}
+                  </span>
+                </div>
+              </div>
+
+              {/* Damaged Quantity */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-foreground">
+                    Quantity Damaged / Broken
+                  </label>
+                  <span className="text-[11px] text-muted-foreground">Units will be deducted from inventory</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setDamageQty(String(Math.max(1, (parseInt(damageQty, 10) || 1) - 1)))}
+                    className="w-10 h-10 rounded-xl border border-border bg-card hover:bg-muted flex items-center justify-center text-foreground font-bold shrink-0 transition-colors"
+                  >
+                    <Minus size={15} />
+                  </button>
+                  <input
+                    type="number"
+                    min="1"
+                    max={damageProduct.stock > 0 ? damageProduct.stock : undefined}
+                    value={damageQty}
+                    onChange={e => setDamageQty(e.target.value)}
+                    placeholder="1"
+                    className="flex-1 px-4 py-2.5 rounded-xl border border-border bg-background text-center text-base font-extrabold text-foreground focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500"
+                    style={{ fontFamily: "'DM Mono', monospace" }}
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setDamageQty(String((parseInt(damageQty, 10) || 0) + 1))}
+                    className="w-10 h-10 rounded-xl border border-border bg-card hover:bg-muted flex items-center justify-center text-foreground font-bold shrink-0 transition-colors"
+                  >
+                    <Plus size={15} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Cause / Reason for Damage */}
+              <div>
+                <label className="block text-xs font-bold text-foreground mb-1.5">
+                  Cause of Damage / Mishandling
+                </label>
+                <select
+                  value={damageReason}
+                  onChange={e => setDamageReason(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-background text-xs font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-amber-500/30 cursor-pointer"
+                >
+                  <option value="Dropped during unboxing / restocking">Dropped during unboxing / restocking</option>
+                  <option value="Crushed / damaged in delivery carton">Crushed / damaged in delivery carton</option>
+                  <option value="Spilled / torn packaging on shelf">Spilled / torn packaging on shelf</option>
+                  <option value="Expired / spoiled prior to restocking">Expired / spoiled prior to restocking</option>
+                  <option value="Water / heat / environmental damage">Water / heat / environmental damage</option>
+                  <option value="Customer mishandling in store">Customer mishandling in store</option>
+                  <option value="Other mishandling write-off">Other mishandling write-off</option>
+                </select>
+              </div>
+
+              {/* Incident Notes */}
+              <div>
+                <label className="block text-xs font-bold text-foreground mb-1.5">
+                  Incident Explanation & Context <span className="text-muted-foreground font-normal">(Optional)</span>
+                </label>
+                <textarea
+                  value={damageNotes}
+                  onChange={e => setDamageNotes(e.target.value)}
+                  placeholder="Explain what happened (e.g. Slipped while carrying 2 cases to shelf aisle)..."
+                  rows={2}
+                  className="w-full px-3.5 py-2 rounded-xl border border-border bg-background text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-amber-500/30 resize-none font-medium"
+                />
+              </div>
+
+              {/* CONSEQUENCE / STAFF LIABILITY CARD */}
+              <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-500/10 via-rose-500/10 to-amber-500/5 border border-amber-500/25 space-y-3 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ShieldAlert size={16} className="text-amber-600 dark:text-amber-400" />
+                    <span className="text-xs font-extrabold text-amber-700 dark:text-amber-300 uppercase tracking-wide">
+                      Consequence & Staff Liability
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                    Pending Payroll Deduction
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 p-2.5 rounded-xl bg-card/60 border border-border/60 text-xs">
+                  <div>
+                    <span className="text-[11px] text-muted-foreground block font-medium">Quantity Deducted</span>
+                    <strong className="text-foreground font-bold" style={{ fontFamily: "'DM Mono', monospace" }}>{parseInt(damageQty, 10) || 0} unit(s)</strong>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[11px] text-muted-foreground block font-medium">Staff Salary Penalty</span>
+                    <strong className="text-rose-600 dark:text-rose-400 font-extrabold text-sm" style={{ fontFamily: "'DM Mono', monospace" }}>
+                      {peso((getResolvedCost(damageProduct)) * (parseInt(damageQty, 10) || 0))}
+                    </strong>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-2 text-[11px] text-amber-800 dark:text-amber-300/90 leading-relaxed bg-amber-500/10 p-2.5 rounded-xl border border-amber-500/20">
+                  <AlertCircle size={14} className="shrink-0 mt-0.5 text-amber-600" />
+                  <span>
+                    <strong>Store Mishandling Policy:</strong> Damaged merchandise is logged against your staff record ({getSavedUser()?.name || "Staff Cashier"}) as a pending payroll deduction. The incident record will be reviewed by the Administrator in the Damage & Loss Report to confirm payroll deduction or grant a loss waiver.
+                  </span>
+                </div>
+              </div>
+
+              {/* Error Message */}
+              {damageErrorMsg && (
+                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs font-bold text-rose-500 flex items-center gap-2">
+                  <AlertTriangle size={15} className="shrink-0 text-rose-500" />
+                  <span>{damageErrorMsg}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-4 border-t border-border bg-muted/40 flex gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={handleCloseDamage}
+                disabled={isReportingDamage}
+                className="flex-1 py-2.5 rounded-xl border border-border bg-card text-sm font-bold text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSubmitDamage}
+                disabled={isReportingDamage || !damageQty || parseInt(damageQty, 10) <= 0}
+                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-sm font-bold transition-all shadow-md shadow-rose-500/20 disabled:opacity-50 flex items-center justify-center gap-1.5"
+              >
+                {isReportingDamage ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Logging Consequence...
+                  </>
+                ) : (
+                  <>
+                    <ShieldAlert size={15} /> Confirm & Log Consequence
                   </>
                 )}
               </button>
@@ -5805,6 +6135,16 @@ function StaffDashboard({ onNavigate, products = [] }: { onNavigate: (p: StaffPa
                           }`}>
                             {p.stock} units left
                           </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowLowStockModal(false);
+                              onNavigate("inventory");
+                            }}
+                            className="px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-colors flex items-center gap-1"
+                          >
+                            <TrendingUp size={12} /> Restock
+                          </button>
                         </div>
                       </div>
                     ))}
@@ -5821,12 +6161,24 @@ function StaffDashboard({ onNavigate, products = [] }: { onNavigate: (p: StaffPa
                   (p.category || "").toLowerCase().includes(lowStockSearch.toLowerCase())
                 ).length} of {lowStockProducts.length} items
               </span>
-              <button
-                onClick={() => { setShowLowStockModal(false); setLowStockSearch(""); }}
-                className="px-5 py-2 bg-[#1f2937] hover:bg-[#374151] text-white text-xs font-bold rounded-xl transition-colors"
-              >
-                Close
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => { setShowLowStockModal(false); setLowStockSearch(""); }}
+                  className="px-4 py-2 border border-border bg-card hover:bg-muted text-xs font-bold text-foreground rounded-xl transition-colors"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={() => {
+                    setShowLowStockModal(false);
+                    setLowStockSearch("");
+                    onNavigate("inventory");
+                  }}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5 shadow-sm"
+                >
+                  <TrendingUp size={14} /> Open Inventory & Restock
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -8216,6 +8568,7 @@ function AdminLayout({ onLogout }: { onLogout: () => void }) {
   };
   const { products, categories, catMeta, addProduct: handleAddProduct, addCategory: handleAddCategory, pendingCustomers, refreshData } = useStore();
   const [pendingReturns, setPendingReturns] = useState(0);
+  const [pendingDamages, setPendingDamages] = useState(0);
 
   const fetchPendingReturns = useCallback(() => {
     api.returns.getAll({ status: "Pending" })
@@ -8223,15 +8576,38 @@ function AdminLayout({ onLogout }: { onLogout: () => void }) {
       .catch(() => {});
   }, []);
 
+  const fetchPendingDamages = useCallback(() => {
+    api.damages.getAll()
+      .then(res => {
+        if (Array.isArray(res)) {
+          const pending = res.filter(d => d.consequence_status === "Pending Payroll Deduction").length;
+          setPendingDamages(pending);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     fetchPendingReturns();
-    const interval = setInterval(fetchPendingReturns, 30000);
+    fetchPendingDamages();
+    const interval = setInterval(() => {
+      fetchPendingReturns();
+      fetchPendingDamages();
+    }, 30000);
     return () => clearInterval(interval);
-  }, [fetchPendingReturns]);
+  }, [fetchPendingReturns, fetchPendingDamages]);
+
+  useEffect(() => {
+    const handleRefresh = () => {
+      fetchPendingDamages();
+    };
+    window.addEventListener("smartmart:refresh-data", handleRefresh);
+    return () => window.removeEventListener("smartmart:refresh-data", handleRefresh);
+  }, [fetchPendingDamages]);
 
   const PAGE_LABELS: Record<AdminPage, string> = {
     dashboard: "Dashboard", products: "Products", categories: "Categories",
-    inventory: "Inventory", sales: "Sales", returns: "Product Returns", customers: "Customers",
+    inventory: "Inventory", damages: "Damaged Items & Consequences", sales: "Sales", returns: "Product Returns", customers: "Customers",
     staff: "Staff", reports: "Reports", settings: "Settings",
   };
 
@@ -8245,7 +8621,8 @@ function AdminLayout({ onLogout }: { onLogout: () => void }) {
       case "dashboard": return <AdminDashboard products={products} categories={categories} />;
       case "products": return <ProductsPage products={products} categories={categories} onAddProduct={handleAddProduct} />;
       case "categories": return <AdminCategoriesPage products={products} categories={categories} catMeta={catMeta} onAddCategory={handleAddCategory} />;
-      case "inventory": return <InventoryPage products={products} categories={categories} catMeta={catMeta} />;
+      case "inventory": return <InventoryPage products={products} categories={categories} catMeta={catMeta} role="admin" />;
+      case "damages": return <AdminDamagesPage />;
       case "sales": return <AdminSalesPage />;
       case "returns": return <ReturnsManagement role="admin" onReturnsUpdated={handleReturnsUpdated} />;
       case "staff": return <AdminStaffPage />;
@@ -8265,6 +8642,7 @@ function AdminLayout({ onLogout }: { onLogout: () => void }) {
         userName="Admin User"
         pendingCount={pendingCustomers.length}
         pendingReturnsCount={pendingReturns}
+        pendingDamagesCount={pendingDamages}
         isCollapsed={isSidebarCollapsed}
         onToggleCollapse={toggleSidebar}
       />
@@ -8325,7 +8703,7 @@ function StaffLayout({ onLogout }: { onLogout: () => void }) {
     switch (page) {
       case "dashboard": return <StaffDashboard onNavigate={p => setPage(p)} products={products} />;
       case "pos": return <POSPage products={products} categories={categories} />;
-      case "inventory": return <InventoryPage products={products} categories={categories} catMeta={CAT_META} />;
+      case "inventory": return <InventoryPage products={products} categories={categories} catMeta={CAT_META} role="staff" />;
       case "transactions": return <TransactionsPage />;
       case "returns": return <ReturnsManagement role="staff" onReturnsUpdated={handleReturnsUpdated} />;
       case "profile": return <StaffProfile />;
