@@ -300,9 +300,9 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     headers["Authorization"] = `Bearer ${token}`;
   }
 
-  // 6-second timeout controller so requests never hang indefinitely
+  // 25-second timeout controller (allows cloud server wake-up/cold start and database connection)
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 6000);
+  const timeoutId = setTimeout(() => controller.abort(), 25000);
 
   try {
     const response = await fetch(`${API_BASE}${endpoint}`, {
